@@ -46,7 +46,7 @@ static	Display		*dpy = NULL;
 static	Window		win;
 static	GLXContext	ctx = NULL;
 
-static	float	old_windowed_mouse = 0, mouse_x, mouse_y, old_mouse_x, old_mouse_y;
+double	old_windowed_mouse = 0, mouse_x, mouse_y, old_mouse_x, old_mouse_y;
 
 #define KEY_MASK (KeyPressMask | KeyReleaseMask)
 #define MOUSE_MASK (ButtonPressMask | ButtonReleaseMask | PointerMotionMask)
@@ -76,6 +76,25 @@ cvar_t	_windowed_mouse = {"_windowed_mouse", "1", 0, OnChange_windowed_mouse};
 cvar_t	m_filter = {"m_filter", "0"};
 cvar_t	cl_keypad = {"cl_keypad", "1"};
 cvar_t	vid_hwgammacontrol = {"vid_hwgammacontrol", "1"};
+
+
+// Sphere --- TODO: Only copied these from in_win.c for now to get a first
+// compiling Linux version. Has to be implemented properly to support these
+// features.
+qboolean use_m_smooth;
+cvar_t m_rate = {"m_rate", "60"};
+int GetCurrentBpp(void)
+{
+	return 32;
+}
+int GetCurrentFreq(void)
+{
+	return 60;
+}
+int menu_bpp, menu_display_freq;
+cvar_t vid_vsync;
+float menu_vsync;
+qboolean gl_have_stencil = true;
 
 //===========================================
 

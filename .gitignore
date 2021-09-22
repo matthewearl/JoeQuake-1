@@ -11,7 +11,7 @@ trunk/.vs/*
 *.res
 *.tlog
 *.asm
-*.txt
 *.user
 *.ipch
 _shelve_*
+build
