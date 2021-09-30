@@ -4,9 +4,6 @@ add_library(joequake_minizip
     unzip.c
     unzip.h
 )
-target_compile_options(joequake_minizip
-    PRIVATE -m32
-)
 target_compile_definitions(joequake_minizip
     PRIVATE NOUNCRYPT
 )
@@ -129,12 +126,6 @@ add_executable(joequake-gl
     zone.h
 )
 
-target_compile_options(joequake-gl
-    PRIVATE -m32
-)
-target_link_options(joequake-gl
-    PRIVATE -m32
-)
 target_compile_definitions(joequake-gl
     PRIVATE GLQUAKE
 )

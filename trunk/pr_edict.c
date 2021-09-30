@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // sv_edict.c -- entity dictionary
 
 #include "quakedef.h"
+#include <stdint.h>
 
 dprograms_t	*progs;
 dfunction_t	*pr_functions;
@@ -39,7 +40,8 @@ qboolean	pr_qdqstats;	//joe: is it a qdqstats progs?
 
 unsigned short	pr_crc;
 
-int		type_size[8] = {1, sizeof(string_t) / 4, 1, 3, 1, 1, sizeof(func_t) / 4, sizeof(void *) / 4};
+typedef int32_t void_ptr_t;  // make sure that these "pointers" are still 32bit in size, even on 64bit compiles
+int		type_size[8] = {1, sizeof(string_t) / 4, 1, 3, 1, 1, sizeof(func_t) / 4, sizeof(void_ptr_t) / 4};
 
 ddef_t *ED_FieldAtOfs (int ofs);
 qboolean ED_ParseEpair (void *base, ddef_t *key, char *s);
