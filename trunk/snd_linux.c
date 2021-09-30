@@ -17,241 +17,199 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 */
-#include <unistd.h>
-#include <fcntl.h>
-#include <stdlib.h>
-#include <sys/types.h>
-#include <sys/ioctl.h>
-#include <sys/mman.h>
-#include <sys/shm.h>
-#include <sys/wait.h>
-#include <linux/soundcard.h>
-#include <stdio.h>
+
+/*
+Note: This is basically the QuakeSpasm implementation for sound with SDL from
+their file snd_sdl.c adapted to the JoeQuake code. Luckily barely anything had
+to be changed and seems to work quite well.
+*/
+
+#include <SDL2/SDL.h>
 #include "quakedef.h"
 
-int	audio_fd, snd_inited;
 
-static	int	tryrates[] = {11025, 22051, 44100, 8000};
+static int	buffersize;
+
+static void SDLCALL paint_audio (void *unused, Uint8 *stream, int len)
+{
+	int	pos, tobufend;
+	int	len1, len2;
+
+	if (!shm)
+	{	/* shouldn't happen, but just in case */
+		memset(stream, 0, len);
+		return;
+	}
+
+	pos = (shm->samplepos * (shm->samplebits / 8));
+	if (pos >= buffersize)
+		shm->samplepos = pos = 0;
+
+	tobufend = buffersize - pos;  /* bytes to buffer's end. */
+	len1 = len;
+	len2 = 0;
+
+	if (len1 > tobufend)
+	{
+		len1 = tobufend;
+		len2 = len - len1;
+	}
+
+	memcpy(stream, shm->buffer + pos, len1);
+
+	if (len2 <= 0)
+	{
+		shm->samplepos += (len1 / (shm->samplebits / 8));
+	}
+	else
+	{	/* wraparound? */
+		memcpy(stream + len1, shm->buffer, len2);
+		shm->samplepos = (len2 / (shm->samplebits / 8));
+	}
+
+	if (shm->samplepos >= buffersize)
+		shm->samplepos = 0;
+}
 
 qboolean SNDDMA_Init (void)
 {
-	int	rc, fmt, tmp, i, caps;
+	SDL_AudioSpec desired;
+	int		tmp, val, i, format_bits;
+	char	drivername[128];
 	char	*s;
-	struct	audio_buf_info	info;
 
-	snd_inited = 0;
-
-// open /dev/dsp, confirm capability to mmap, and get size of dma buffer
-
-	audio_fd = open ("/dev/dsp", O_RDWR);
-	if (audio_fd < 0)
+	if (SDL_InitSubSystem(SDL_INIT_AUDIO) < 0)
 	{
-		perror ("/dev/dsp");
-		Con_Printf ("Could not open /dev/dsp\n");
-		return 0;
+		Con_Printf("Couldn't init SDL audio: %s\n", SDL_GetError());
+		return false;
 	}
-
-	rc = ioctl (audio_fd, SNDCTL_DSP_RESET, 0);
-	if (rc < 0)
-	{
-		perror ("/dev/dsp");
-		Con_Printf ("Could not reset /dev/dsp\n");
-		close (audio_fd);
-		return 0;
-	}
-
-	if (ioctl(audio_fd, SNDCTL_DSP_GETCAPS, &caps) == -1)
-	{
-		perror ("/dev/dsp");
-		Con_Printf ("Sound driver too old\n");
-		close (audio_fd);
-		return 0;
-	}
-
-	if (!(caps & DSP_CAP_TRIGGER) || !(caps & DSP_CAP_MMAP))
-	{
-		Con_Printf ("Sorry but your soundcard can't do this\n");
-		close (audio_fd);
-		return 0;
-	}
-
-	if (ioctl(audio_fd, SNDCTL_DSP_GETOSPACE, &info) == -1)
-	{   
-		perror ("GETOSPACE");
-		Con_Printf ("Um, can't do GETOSPACE?\n");
-		close (audio_fd);
-		return 0;
-	}
-    
-	shm = &sn;
-	shm->splitbuffer = 0;
 
 // set sample bits & speed
 	if ((s = getenv("QUAKE_SOUND_SAMPLEBITS")))
-		shm->samplebits = Q_atoi(s);
+		format_bits = Q_atoi(s);
 	else if ((i = COM_CheckParm("-sndbits")) && i + 1 < com_argc)
-		shm->samplebits = Q_atoi(com_argv[i+1]);
+		format_bits = Q_atoi(com_argv[i+1]);
 
-	if (shm->samplebits != 16 && shm->samplebits != 8)
+	if (format_bits == 8)
 	{
-		ioctl (audio_fd, SNDCTL_DSP_GETFMTS, &fmt);
-		if (fmt & AFMT_S16_LE)
-			shm->samplebits = 16;
-		else if (fmt & AFMT_U8)
-			shm->samplebits = 8;
+		desired.format = AUDIO_U8;
+	}
+	else
+	{
+		desired.format = AUDIO_S16SYS;
 	}
 
 	if ((s = getenv("QUAKE_SOUND_SPEED")))
-		shm->speed = Q_atoi(s);
+		desired.freq = Q_atoi(s);
 	else if ((i = COM_CheckParm("-sndspeed")) && i + 1 < com_argc)
-		shm->speed = Q_atoi(com_argv[i+1]);
+		desired.freq = Q_atoi(com_argv[i+1]);
 	else if (s_khz.value == 44)
-		shm->speed = 44100;
+		desired.freq = 44100;
 	else if (s_khz.value == 22)
-		shm->speed = 22050;
+		desired.freq = 22050;
 	else
 	{
-		for (i=0 ; i<sizeof(tryrates)/4 ; i++)
-			if (!ioctl(audio_fd, SNDCTL_DSP_SPEED, &tryrates[i]))
-				break;
-		shm->speed = tryrates[i];
+		desired.freq = 11025;
 	}
 
 	if ((s = getenv("QUAKE_SOUND_CHANNELS")))
-		shm->channels = Q_atoi(s);
+		desired.channels = Q_atoi(s);
 	else if ((i = COM_CheckParm("-sndmono")))
-		shm->channels = 1;
+		desired.channels = 1;
 	else if ((i = COM_CheckParm("-sndstereo")))
-		shm->channels = 2;
+		desired.channels = 2;
 	else
-		shm->channels = 2;
+		desired.channels = 2;
 
-	shm->samples = info.fragstotal * info.fragsize / (shm->samplebits / 8);
+	if (desired.freq <= 11025)
+		desired.samples = 256;
+	else if (desired.freq <= 22050)
+		desired.samples = 512;
+	else if (desired.freq <= 44100)
+		desired.samples = 1024;
+	else if (desired.freq <= 56000)
+		desired.samples = 2048; /* for 48 kHz */
+	else
+		desired.samples = 4096; /* for 96 kHz */
+	desired.callback = paint_audio;
+	desired.userdata = NULL;
+
+	/* Open the audio device */
+	if (SDL_OpenAudio(&desired, NULL) == -1)
+	{
+		Con_Printf("Couldn't open SDL audio: %s\n", SDL_GetError());
+		SDL_QuitSubSystem(SDL_INIT_AUDIO);
+		return false;
+	}
+
+	shm = &sn;
+	shm->splitbuffer = 0;
+
+	/* Fill the audio DMA information block */
+	/* Since we passed NULL as the 'obtained' spec to SDL_OpenAudio(),
+	 * SDL will convert to hardware format for us if needed, hence we
+	 * directly use the desired values here. */
+	shm->samplebits = (desired.format & 0xFF); /* first byte of format is bits */
+	printf("desired.format: %i\n", desired.format);
+	shm->speed = desired.freq;
+	shm->channels = desired.channels;
+	tmp = (desired.samples * desired.channels) * 10;
+	if (tmp & (tmp - 1))
+	{	/* make it a power of two */
+		val = 1;
+		while (val < tmp)
+			val <<= 1;
+
+		tmp = val;
+	}
+	shm->samples = tmp;
+	shm->samplepos = 0;
 	shm->submission_chunk = 1;
 
-// memory map the dma buffer
-	shm->buffer = (unsigned char *)mmap (NULL, info.fragstotal * info.fragsize, PROT_WRITE, MAP_FILE|MAP_SHARED, audio_fd, 0);
-	if (!shm->buffer || shm->buffer == (unsigned char *)-1)
+	Con_Printf ("SDL audio spec  : %d Hz, %d samples, %d channels\n",
+			desired.freq, desired.samples, desired.channels);
 	{
-		perror ("/dev/dsp");
-		Con_Printf ("Could not mmap /dev/dsp\n");
-		close (audio_fd);
-		return 0;
+		const char *driver = SDL_GetCurrentAudioDriver();
+		const char *device = SDL_GetAudioDeviceName(0, SDL_FALSE);
+		snprintf(drivername, sizeof(drivername), "%s - %s",
+			driver != NULL ? driver : "(UNKNOWN)",
+			device != NULL ? device : "(UNKNOWN)");
 	}
 
-	tmp = 0;
-	if (shm->channels == 2)
-		tmp = 1;
-	rc = ioctl (audio_fd, SNDCTL_DSP_STEREO, &tmp);
-	if (rc < 0)
+	buffersize = shm->samples * (shm->samplebits / 8);
+	Con_Printf ("SDL audio driver: %s, %d bytes buffer\n", drivername, buffersize);
+
+	shm->buffer = (unsigned char *) calloc (1, buffersize);
+	if (!shm->buffer)
 	{
-		perror ("/dev/dsp");
-		Con_Printf ("Could not set /dev/dsp to stereo=%d", shm->channels);
-		close (audio_fd);
-		return 0;
+		SDL_CloseAudio();
+		SDL_QuitSubSystem(SDL_INIT_AUDIO);
+		shm = NULL;
+		Con_Printf ("Failed allocating memory for SDL audio\n");
+		return false;
 	}
 
-	if (tmp)
-		shm->channels = 2;
-	else
-		shm->channels = 1;
+	SDL_PauseAudio(0);
 
-	rc = ioctl (audio_fd, SNDCTL_DSP_SPEED, &shm->speed);
-	if (rc < 0)
-	{
-		perror ("/dev/dsp");
-		Con_Printf ("Could not set /dev/dsp speed to %d", shm->speed);
-		close (audio_fd);
-		return 0;
-	}
-
-	if (shm->samplebits == 16)
-	{
-		rc = AFMT_S16_LE;
-		rc = ioctl (audio_fd, SNDCTL_DSP_SETFMT, &rc);
-		if (rc < 0)
-		{
-			perror ("/dev/dsp");
-			Con_Printf ("Could not support 16-bit data. Try 8-bit.\n");
-			close (audio_fd);
-			return 0;
-		}
-	}
-	else if (shm->samplebits == 8)
-	{
-		rc = AFMT_U8;
-		rc = ioctl (audio_fd, SNDCTL_DSP_SETFMT, &rc);
-		if (rc < 0)
-		{
-			perror ("/dev/dsp");
-			Con_Printf ("Could not support 8-bit data.\n");
-			close (audio_fd);
-			return 0;
-		}
-	}
-	else
-	{
-		perror ("/dev/dsp");
-		Con_Printf ("%d-bit sound not supported.", shm->samplebits);
-		close (audio_fd);
-		return 0;
-	}
-
-// toggle the trigger & start her up
-	tmp = 0;
-	rc  = ioctl (audio_fd, SNDCTL_DSP_SETTRIGGER, &tmp);
-	if (rc < 0)
-	{
-		perror ("/dev/dsp");
-		Con_Printf ("Could not toggle.\n");
-		close (audio_fd);
-		return 0;
-	}
-
-	tmp = PCM_ENABLE_OUTPUT;
-	rc = ioctl (audio_fd, SNDCTL_DSP_SETTRIGGER, &tmp);
-	if (rc < 0)
-	{
-		perror ("/dev/dsp");
-		Con_Printf ("Could not toggle.\n");
-		close (audio_fd);
-		return 0;
-	}
-
-	shm->samplepos = 0;
-
-	snd_inited = 1;
-	return 1;
+	return true;
 }
 
 int SNDDMA_GetDMAPos (void)
 {
-	struct count_info count;
-
-	if (!snd_inited)
-		return 0;
-
-	if (ioctl(audio_fd, SNDCTL_DSP_GETOPTR, &count) == -1)
-	{
-		perror ("/dev/dsp");
-		Con_Printf ("Uh, sound dead.\n");
-		close (audio_fd);
-		snd_inited = 0;
-		return 0;
-	}
-//	shm->samplepos = (count.bytes / (shm->samplebits / 8)) & (shm->samples-1);
-//	fprintf(stderr, "%d    \r", count.ptr);
-	shm->samplepos = count.ptr / (shm->samplebits / 8);
-
 	return shm->samplepos;
 }
 
 void SNDDMA_Shutdown (void)
 {
-	if (snd_inited)
+	if (shm)
 	{
-		close (audio_fd);
-		snd_inited = 0;
+		Con_Printf ("Shutting down SDL sound\n");
+		SDL_CloseAudio();
+		SDL_QuitSubSystem(SDL_INIT_AUDIO);
+		if (shm->buffer)
+			free (shm->buffer);
+		shm->buffer = NULL;
+		shm = NULL;
 	}
 }
 
@@ -264,4 +222,5 @@ Send sound to device if buffer isn't really the dma buffer
 */
 void SNDDMA_Submit (void)
 {
+	SDL_UnlockAudio();
 }
