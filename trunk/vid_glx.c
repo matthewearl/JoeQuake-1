@@ -347,6 +347,14 @@ static void GetEvent (void)
 		case 5:
 			Key_Event (K_MWHEELDOWN, event.type == ButtonPress);
 			break;
+
+		case 8:
+			Key_Event (K_MOUSE4, event.type == ButtonPress);
+			break;
+
+		case 9:
+			Key_Event (K_MOUSE5, event.type == ButtonPress);
+			break;
 		}
 		break;
 	}
