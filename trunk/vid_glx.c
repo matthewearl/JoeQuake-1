@@ -46,7 +46,7 @@ static	Display		*dpy = NULL;
 static	Window		win;
 static	GLXContext	ctx = NULL;
 
-double	old_windowed_mouse = 0, mouse_x, mouse_y, old_mouse_x, old_mouse_y;
+double	old_windowed_mouse = 0, mx, my, mouse_x, mouse_y, old_mouse_x, old_mouse_y;
 
 #define KEY_MASK (KeyPressMask | KeyReleaseMask)
 #define MOUSE_MASK (ButtonPressMask | ButtonReleaseMask | PointerMotionMask)
@@ -308,13 +308,13 @@ static void GetEvent (void)
 		{
 			if (dgamouse)
 			{
-				mouse_x += event.xmotion.x_root;
-				mouse_y += event.xmotion.y_root;
+				mx += event.xmotion.x_root;
+				my += event.xmotion.y_root;
 			}
 			else
 			{
-				mouse_x = ((int)event.xmotion.x - (int)(vid.width / 2));
-				mouse_y = ((int)event.xmotion.y - (int)(vid.height / 2));
+				mx = ((int)event.xmotion.x - (int)(vid.width / 2));
+				my = ((int)event.xmotion.y - (int)(vid.height / 2));
 
 				// move the mouse to the window center again
 				XSelectInput (dpy, win, X_MASK & ~PointerMotionMask);
@@ -734,45 +734,79 @@ void IN_Commands (void)
 
 void IN_MouseMove (usercmd_t *cmd)
 {
-	float	tx, ty;
-
-	tx = mouse_x;
-	ty = mouse_y;
-
 	if (m_filter.value)
 	{
-		mouse_x = (tx + old_mouse_x) * 0.5;
-		mouse_y = (ty + old_mouse_y) * 0.5;
-	}
-
-	old_mouse_x = tx;
-	old_mouse_y = ty;
-
-	mouse_x *= sensitivity.value;
-	mouse_y *= sensitivity.value;
-
-	// add mouse X/Y movement to cmd
-	if ((in_strafe.state & 1) || (lookstrafe.value && mlook_active))
-		cmd->sidemove += m_side.value * mouse_x;
-	else
-		cl.viewangles[YAW] -= m_yaw.value * mouse_x;
-
-	if (mlook_active)
-		V_StopPitchDrift ();
-
-	if (mlook_active && !(in_strafe.state & 1))
-	{
-		cl.viewangles[PITCH] += m_pitch.value * mouse_y;
-		cl.viewangles[PITCH] = bound(-70, cl.viewangles[PITCH], 80);
+		mouse_x = (mx + old_mouse_x) * 0.5;
+		mouse_y = (my + old_mouse_y) * 0.5;
 	}
 	else
 	{
-		if ((in_strafe.state & 1) && noclip_anglehack)
-			cmd->upmove -= m_forward.value * mouse_y;
+		mouse_x = mx;
+		mouse_y = my;
+	}
+
+	old_mouse_x = mx;
+	old_mouse_y = my;
+
+	if (m_accel.value)
+	{
+		float mousespeed = sqrt(mx * mx + my * my);
+		float m_accel_factor = m_accel.value * 0.1;
+
+		if (key_dest == key_menu || key_dest == key_console)
+		{
+			mouse_x *= ((mousespeed * m_accel_factor) + cursor_sensitivity.value);
+			mouse_y *= ((mousespeed * m_accel_factor) + cursor_sensitivity.value);
+		}
 		else
-			cmd->forwardmove -= m_forward.value * mouse_y;
+		{
+			mouse_x *= ((mousespeed * m_accel_factor) + sensitivity.value);
+			mouse_y *= ((mousespeed * m_accel_factor) + sensitivity.value);
+		}
 	}
-	mouse_x = mouse_y = 0.0;
+	else
+	{
+		if (key_dest == key_menu || key_dest == key_console)
+		{
+			mouse_x *= cursor_sensitivity.value;
+			mouse_y *= cursor_sensitivity.value;
+		}
+		else
+		{
+			mouse_x *= sensitivity.value;
+			mouse_y *= sensitivity.value;
+		}
+	}
+
+	//
+	// Do not move the player if we're in menu mode.
+	// And don't apply ingame sensitivity, since that will make movements jerky.
+	//
+	if (key_dest != key_menu && key_dest != key_console)
+	{
+		// add mouse X/Y movement to cmd
+		if ((in_strafe.state & 1) || (lookstrafe.value && mlook_active))
+			cmd->sidemove += m_side.value * mouse_x;
+		else
+			cl.viewangles[YAW] -= m_yaw.value * mouse_x;
+
+		if (mlook_active)
+			V_StopPitchDrift();
+
+		if (mlook_active && !(in_strafe.state & 1))
+		{
+			cl.viewangles[PITCH] += m_pitch.value * mouse_y;
+			cl.viewangles[PITCH] = bound(-70, cl.viewangles[PITCH], 80);
+		}
+		else
+		{
+			if ((in_strafe.state & 1) && noclip_anglehack)
+				cmd->upmove -= m_forward.value * mouse_y;
+			else
+				cmd->forwardmove -= m_forward.value * mouse_y;
+		}
+	}
+	mx = my = 0.0;
 }
 
 void IN_Move (usercmd_t *cmd)
