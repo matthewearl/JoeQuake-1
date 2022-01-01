@@ -666,6 +666,11 @@ void PF_traceline (void)
 	nomonsters = G_FLOAT(OFS_PARM2);
 	ent = G_EDICT(OFS_PARM3);
 
+	if (IS_NAN(v1[0]) || IS_NAN(v1[1]) || IS_NAN(v1[2]))
+		v1[0] = v1[1] = v1[2] = 0;
+	if (IS_NAN(v2[0]) || IS_NAN(v2[1]) || IS_NAN(v2[2]))
+		v2[0] = v2[1] = v2[2] = 0;
+
 	trace = SV_Move (v1, vec3_origin, vec3_origin, v2, nomonsters, ent);
 
 	pr_global_struct->trace_allsolid = trace.allsolid;
@@ -1726,6 +1731,7 @@ PF_finalefinished -- used by 2021 release.
 */
 void PF_finalefinished(void)
 {
+	G_FLOAT(OFS_RETURN) = 0;
 }
 
 void PF_sin (void)
@@ -1839,7 +1845,20 @@ PF_precache_file,
 PF_setspawnparms,
 
 // 2021 release
-PF_finalefinished	// void() finaleFinished = #79
+PF_finalefinished,	// float() finaleFinished = #79
+PF_Fixme,			// void localsound (entity client, string sample) = #80
+PF_Fixme,			// void draw_point (vector point, float colormap, float lifetime, float depthtest) = #81
+PF_Fixme,			// void draw_line (vector start, vector end, float colormap, float lifetime, float depthtest) = #82
+PF_Fixme,			// void draw_arrow (vector start, vector end, float colormap, float size, float lifetime, float depthtest) = #83
+PF_Fixme,			// void draw_ray (vector start, vector direction, float length, float colormap, float size, float lifetime, float depthtest) = #84
+PF_Fixme,			// void draw_circle (vector origin, float radius, float colormap, float lifetime, float depthtest) = #85
+PF_Fixme,			// void draw_bounds (vector min, vector max, float colormap, float lifetime, float depthtest) = #86
+PF_Fixme,			// void draw_worldtext (string s, vector origin, float size, float lifetime, float depthtest) = #87
+PF_Fixme,			// void draw_sphere (vector origin, float radius, float colormap, float lifetime, float depthtest) = #88
+PF_Fixme,			// void draw_cylinder (vector origin, float halfHeight, float radius, float colormap, float lifetime, float depthtest) = #89
+PF_centerprint ,	// #90
+PF_bprint,
+PF_sprint, 
 };
 
 builtin_t	*pr_builtins = pr_builtin;

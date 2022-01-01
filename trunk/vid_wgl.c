@@ -112,6 +112,8 @@ qboolean	customgamma = false;
 
 void RestoreHWGamma (void);
 
+extern GLuint r_gamma_texture;
+
 HWND WINAPI InitializeWindow (HINSTANCE hInstance, int nCmdShow);
 
 modestate_t	modestate = MS_UNINIT;
@@ -595,6 +597,9 @@ int VID_SetMode (int modenum, unsigned char *palette)
 
 	vid.recalc_refdef = 1;
 
+	// force reloading GLSL gamma after mode change
+	r_gamma_texture = 0;
+
 	return true;
 }
 
@@ -834,8 +839,6 @@ qboolean OnChange_vid_mode(cvar_t *var, char *string)
 
 	// we call a few Cvar_SetValues in VID_SetMode and in deeper functions but their callbacks will not be triggered
 	VID_SetMode(modenum, host_basepal);
-
-	//Cbuf_AddText("v_cshift 0 0 0 1\n");	//FIXME
 
 	return true;
 }
@@ -1867,14 +1870,8 @@ int	video_cursor_row = 0;
 int	video_cursor_column = 0;
 int video_mode_rows = 0;
 
-extern	void M_Menu_Options_f (void);
-extern	void M_Print (int cx, int cy, char *str);
-extern	void M_PrintWhite (int cx, int cy, char *str);
-extern	void M_DrawCharacter (int cx, int line, int num);
-extern	void M_DrawTransPic (int x, int y, mpic_t *pic);
-extern	void M_DrawPic (int x, int y, mpic_t *pic);
-extern	void M_DrawCheckbox(int x, int y, int on);
-extern	void M_DrawSliderFloat2(int x, int y, float range, float value);
+menu_window_t video_window;
+menu_window_t video_slider_resscale_window;
 
 static	int	vid_line, vid_wmodes;
 
@@ -1897,23 +1894,6 @@ typedef struct
 
 static	modedesc_t	modedescs[MAX_MODEDESCS];
 
-void VID_AdjustSliders(int dir)
-{
-	S_LocalSound("misc/menu3.wav");
-
-	switch (video_cursor_row)
-	{
-	case 4:	// resolution scale
-		r_scale.value += dir * 0.05;
-		r_scale.value = bound(0.25, r_scale.value, 1);
-		Cvar_SetValue(&r_scale, r_scale.value);
-		break;
-
-	default:
-		break;
-	}
-}
-
 /*
 ================
 VID_MenuDraw
@@ -1923,7 +1903,7 @@ void VID_MenuDraw (void)
 {
 	mpic_t	*p;
 	char	*ptr, bpp[10], display_freq[10];
-	int		lnummodes, i, k, column, row;
+	int		lnummodes, i, k, column, row, lx, ly;
 	float	r;
 	vmode_t	*pv;
 
@@ -1950,25 +1930,26 @@ void VID_MenuDraw (void)
 		vid_wmodes++;
 	}
 
-	M_Print(16, 32, "        Fullscreen");
+	M_Print_GetPoint(16, 32, &video_window.x, &video_window.y, "        Fullscreen", video_cursor_row == 0);
+	video_window.x -= 16;	// adjust it slightly to the left due to the larger, 3 columns vid modes list
 	M_DrawCheckbox(188, 32, !windowed);
 
-	M_Print(16, 40, "       Color depth");
+	M_Print_GetPoint(16, 40, &lx, &ly, "       Color depth", video_cursor_row == 1);
 	sprintf(bpp, menu_bpp == 0 ? "desktop" : "%i", menu_bpp);
 	M_Print(188, 40, bpp);
 
-	M_Print(16, 48, "      Refresh rate");
+	M_Print_GetPoint(16, 48, &lx, &ly, "      Refresh rate", video_cursor_row == 2);
 	sprintf(display_freq, menu_display_freq == 0 ? "desktop" : "%i Hz", menu_display_freq);
 	M_Print(188, 48, display_freq);
 
-	M_Print(16, 56, "     Vertical sync");
+	M_Print_GetPoint(16, 56, &lx, &ly, "     Vertical sync", video_cursor_row == 3);
 	M_DrawCheckbox(188, 56, menu_vsync);
 
-	M_Print(16, 64, "  Resolution scale");
+	M_Print_GetPoint(16, 64, &lx, &ly, "  Resolution scale", video_cursor_row == 4);
 	r = (r_scale.value - 0.25) / 0.75;
-	M_DrawSliderFloat2(188, 64, r, r_scale.value);
+	M_DrawSliderFloat2(188, 64, r, r_scale.value, &video_slider_resscale_window);
 
-	M_PrintWhite(16, 80, "     Apply changes");
+	M_Print_GetPoint(16, 80, &lx, &ly, "     Apply changes", video_cursor_row == 6);
 
 	column = 0;
 	row = 32 + VIDEO_ITEMS * 8;
@@ -1977,9 +1958,9 @@ void VID_MenuDraw (void)
 	for (i = 0 ; i < vid_wmodes ; i++)
 	{
 		if (modedescs[i].iscur)
-			M_PrintWhite (column, row, modedescs[i].desc);
-		else
 			M_Print (column, row, modedescs[i].desc);
+		else
+			M_Print_GetPoint(column, row, &lx, &ly, modedescs[i].desc, video_cursor_row == ((row - 32) / 8) && video_cursor_column == (column / (14 * 8)));
 
 		column += 14 * 8;
 
@@ -1995,13 +1976,11 @@ void VID_MenuDraw (void)
 		}
 	}
 
-	// cursor
-	if (video_cursor_row < VIDEO_ITEMS)
-		M_DrawCharacter(168, 32 + video_cursor_row * 8, 12 + ((int)(realtime * 4) & 1));
-	else // we are in the resolutions region
-		M_DrawCharacter(-8 + video_cursor_column * 14 * 8, 32 + video_cursor_row * 8, 12 + ((int)(realtime * 4) & 1));
+	video_window.w = (24 + 17) * 8; // presume 8 pixels for each letter
+	video_window.h = ly - video_window.y + 8;
 
-	M_Print(8 * 8, row + 8, "Press enter to set mode");
+	if (video_cursor_row >= 8)
+		M_Print(8 * 8, row + 8, "Press enter to set mode");
 
 	if (video_cursor_row == 0 && modestate == MS_FULLDIB)
 	{
@@ -2022,6 +2001,33 @@ void VID_MenuDraw (void)
 		M_PrintWhite(48, 11 * 8, "Would you like to keep this");
 		M_PrintWhite(48, 12 * 8, "        video mode?");
 	}
+
+	// don't draw cursor if we're on a spacing line
+	if (video_cursor_row == 5 || video_cursor_row == 7)
+		return;
+
+	// cursor
+	if (video_cursor_row < VIDEO_ITEMS)
+		M_DrawCharacter(168, 32 + video_cursor_row * 8, 12 + ((int)(realtime * 4) & 1));
+	else // we are in the resolutions region
+		M_DrawCharacter(-8 + video_cursor_column * 14 * 8, 32 + video_cursor_row * 8, 12 + ((int)(realtime * 4) & 1));
+}
+
+void M_Video_KeyboardSlider(int dir)
+{
+	S_LocalSound("misc/menu3.wav");
+
+	switch (video_cursor_row)
+	{
+	case 4:	// resolution scale
+		r_scale.value += dir * 0.05;
+		r_scale.value = bound(0.25, r_scale.value, 1);
+		Cvar_SetValue(&r_scale, r_scale.value);
+		break;
+
+	default:
+		break;
+	}
 }
 
 /*
@@ -2036,12 +2042,12 @@ void VID_MenuKey (int key)
 
 	if (m_videomode_change_confirm)
 	{
-		if (key == 'y' || key == K_ENTER /*|| key == K_MOUSE1*/)
+		if (key == 'y' || key == K_ENTER || key == K_MOUSE1)
 		{
 			m_videomode_change_confirm = false;
 			m_entersound = true;
 		}
-		else if (key == 'n' || key == K_ESCAPE /*|| key == K_MOUSE2*/)
+		else if (key == 'n' || key == K_ESCAPE || key == K_MOUSE2)
 		{
 			Cvar_SetValue(&vid_mode, (float)oldmodenum);
 			m_videomode_change_confirm = false;
@@ -2053,10 +2059,12 @@ void VID_MenuKey (int key)
 	switch (key)
 	{
 	case K_ESCAPE:
+	case K_MOUSE2:
 		M_Menu_Options_f ();
 		break;
 
 	case K_UPARROW:
+	case K_MWHEELUP:
 		S_LocalSound("misc/menu1.wav");
 		video_cursor_row--;
 		if (video_cursor_row < 0)
@@ -2069,6 +2077,7 @@ void VID_MenuKey (int key)
 		break;
 
 	case K_DOWNARROW:
+	case K_MWHEELDOWN:
 		S_LocalSound("misc/menu1.wav");
 		video_cursor_row++;
 		if (video_cursor_row >= (VIDEO_ITEMS + video_mode_rows))
@@ -2089,7 +2098,7 @@ void VID_MenuKey (int key)
 	case K_END:
 	case K_PGDN:
 		S_LocalSound("misc/menu1.wav");
-		video_cursor_row = (VIDEO_ITEMS  + video_mode_rows) - 1;
+		video_cursor_row = (VIDEO_ITEMS + video_mode_rows) - 1;
 		break;
 
 	case K_LEFTARROW:
@@ -2114,7 +2123,7 @@ void VID_MenuKey (int key)
 			}
 		}
 		else
-			VID_AdjustSliders(-1);
+			M_Video_KeyboardSlider(-1);
 		break;
 
 	case K_RIGHTARROW:
@@ -2125,10 +2134,11 @@ void VID_MenuKey (int key)
 				video_cursor_column = 0;
 		}
 		else
-			VID_AdjustSliders(1);
+			M_Video_KeyboardSlider(1);
 		break;
 
 	case K_ENTER:
+	case K_MOUSE1:
 		S_LocalSound("misc/menu2.wav");
 		switch (video_cursor_row)
 		{
@@ -2201,4 +2211,44 @@ void VID_MenuKey (int key)
 		video_cursor_row--;
 	else if (key == K_DOWNARROW && (video_cursor_row == 5 || video_cursor_row == 7))
 		video_cursor_row++;
+}
+
+extern qboolean M_Mouse_Select_Column(const menu_window_t *uw, const mouse_state_t *m, int entries, int *newentry);
+extern qboolean M_Mouse_Select_RowColumn(const menu_window_t *uw, const mouse_state_t *m, int row_entries, int *newentry_row, int col_entries, int *newentry_col);
+
+void M_Video_MouseSlider(int k, const mouse_state_t *ms)
+{
+	int slider_pos;
+
+	switch (k)
+	{
+	case K_MOUSE2:
+		break;
+
+	case K_MOUSE1:
+		switch (video_cursor_row)
+		{
+		case 4:	// resolution scale
+			M_Mouse_Select_Column(&video_slider_resscale_window, ms, 16, &slider_pos);
+			r_scale.value = bound(0.25, 0.25 + (slider_pos * 0.05), 1);
+			Cvar_SetValue(&r_scale, r_scale.value);
+			break;
+
+		default:
+			break;
+		}
+		return;
+	}
+}
+
+qboolean M_Video_Mouse_Event(const mouse_state_t *ms)
+{
+	M_Mouse_Select_RowColumn(&video_window, ms, VIDEO_ITEMS + video_mode_rows, &video_cursor_row, VID_ROW_SIZE, &video_cursor_column);
+
+	if (ms->button_up == 1) VID_MenuKey(K_MOUSE1);
+	if (ms->button_up == 2) VID_MenuKey(K_MOUSE2);
+
+	if (ms->buttons[1]) M_Video_MouseSlider(K_MOUSE1, ms);
+
+	return true;
 }

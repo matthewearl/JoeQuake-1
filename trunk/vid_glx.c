@@ -779,3 +779,10 @@ void IN_Move (usercmd_t *cmd)
 {
 	IN_MouseMove (cmd);
 }
+
+qboolean M_Video_Mouse_Event(const mouse_state_t *ms)
+{
+	// We do not have the menu for switching video modes on Linux yet, so we
+	// do not need to implement this function.
+	return true;
+}
