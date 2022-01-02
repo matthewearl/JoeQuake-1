@@ -358,7 +358,7 @@ static void GetEvent (void)
 				my = ((int)event.xmotion.y - (int)(vid.height / 2));
 
 				// move the mouse to the window center again
-				XSelectInput (dpy, win, X_MASK|FocusChangeMask & ~PointerMotionMask);
+				XSelectInput (dpy, win, X_MASK & ~PointerMotionMask);
 				XWarpPointer (dpy, None, win, 0, 0, 0, 0, (vid.width / 2), (vid.height / 2));
 				XSelectInput (dpy, win, X_MASK|FocusChangeMask);
 			}
