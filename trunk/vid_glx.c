@@ -39,6 +39,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <X11/extensions/xf86dga.h>
 #include <X11/extensions/xf86vmode.h>
 
+#include "quake.ico.h"
+
 #define	WARP_WIDTH	320
 #define	WARP_HEIGHT	200
 
@@ -703,6 +705,14 @@ void VID_Init (unsigned char *palette)
 	win = XCreateWindow (dpy, root, 0, 0, width, height, 0, visinfo->depth, InputOutput, visinfo->visual, mask, &attr);
 	XDefineCursor (dpy, win, CreateNullCursor(dpy, win));
 	XMapWindow (dpy, win);
+
+	XStoreName (dpy, win, "JoeQuake");
+	XClassHint classhint = {"joequake-gl", "JoeQuake"};
+	XSetClassHint (dpy, win, &classhint);
+
+	Atom net_wm_icon = XInternAtom(dpy, "_NET_WM_ICON", False);
+	Atom cardinal = XInternAtom(dpy, "CARDINAL", False);
+	XChangeProperty(dpy, win, net_wm_icon, cardinal, 32, PropModeReplace, (const unsigned char*)joequake_icon, joequake_icon_length);
 
 	if (vidmode_active)
 	{
