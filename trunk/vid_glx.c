@@ -46,7 +46,7 @@ static	Display		*dpy = NULL;
 static	Window		win;
 static	GLXContext	ctx = NULL;
 
-double	old_windowed_mouse = 0, mx, my, mouse_x, mouse_y, old_mouse_x, old_mouse_y;
+double	old_windowed_mouse = 1, mx, my, mouse_x, mouse_y, old_mouse_x, old_mouse_y;
 
 #define KEY_MASK (KeyPressMask | KeyReleaseMask)
 #define MOUSE_MASK (ButtonPressMask | ButtonReleaseMask | PointerMotionMask)
@@ -325,6 +325,18 @@ static void GetEvent (void)
 
 	switch (event.type)
 	{
+	case FocusOut:
+		if (_windowed_mouse.value)
+			uninstall_mouse_grab();
+		break;
+
+	case FocusIn:
+		if (_windowed_mouse.value)
+			install_mouse_grab();
+		// fix leftover Alt from any Alt-Tab or the like that dropped focus for us
+		Key_Event(K_ALT, false);
+		break;
+
 	case KeyPress:
 	case KeyRelease:
 		Key_Event (XLateKey(&event.xkey), event.type == KeyPress);
@@ -344,9 +356,9 @@ static void GetEvent (void)
 				my = ((int)event.xmotion.y - (int)(vid.height / 2));
 
 				// move the mouse to the window center again
-				XSelectInput (dpy, win, X_MASK & ~PointerMotionMask);
+				XSelectInput (dpy, win, X_MASK|FocusChangeMask & ~PointerMotionMask);
 				XWarpPointer (dpy, None, win, 0, 0, 0, 0, (vid.width / 2), (vid.height / 2));
-				XSelectInput (dpy, win, X_MASK);
+				XSelectInput (dpy, win, X_MASK|FocusChangeMask);
 			}
 		}
 		break;
@@ -701,7 +713,7 @@ void VID_Init (unsigned char *palette)
 		XF86VidModeSetViewPort (dpy, scrnum, 0, 0);
 	}
 
-	XSelectInput (dpy, win, X_MASK);
+	XSelectInput (dpy, win, X_MASK|FocusChangeMask);
 	install_keyboard_grab();
 
 	XFlush (dpy);
