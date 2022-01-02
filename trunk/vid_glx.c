@@ -237,31 +237,57 @@ static int XLateKey (XKeyEvent *ev)
 	return key;
 }
 
-static void install_grabs (void)
+static void install_mouse_grab (void)
 {
-	int	DGAflags = 0;
-
-	XGrabPointer (dpy, win, True, 0, GrabModeAsync, GrabModeAsync, win, None, CurrentTime);
-
-	if (!COM_CheckParm("-nomdga"))
-		DGAflags |= XF86DGADirectMouse;
-	if (!COM_CheckParm("-nokdga"))
-		DGAflags |= XF86DGADirectKeyb;
-
-	if (!COM_CheckParm("-nodga") && DGAflags)
+	if (!COM_CheckParm("-nodga") && !COM_CheckParm("-nomdga"))
 	{
+		int DGAflags = XF86DGADirectMouse;
+		if (dgakeyb)
+			DGAflags |= XF86DGADirectKeyb;
 		XF86DGADirectVideo (dpy, DefaultScreen(dpy), DGAflags);
-		if (DGAflags & XF86DGADirectMouse)
-			dgamouse = true;
-		if (DGAflags & XF86DGADirectKeyb)
-			dgakeyb = true;
-	} 
+		XGrabPointer (dpy, win, True, 0, GrabModeAsync, GrabModeAsync, win, None, CurrentTime);
+		dgamouse = true;
+	}
 	else
 	{
 		XWarpPointer (dpy, None, win, 0, 0, 0, 0, vid.width / 2, vid.height / 2);
 	}
+}
 
-	XGrabKeyboard (dpy, win, False, GrabModeAsync, GrabModeAsync, CurrentTime);
+static void uninstall_mouse_grab (void)
+{
+	if (dgamouse)
+	{
+		XUngrabPointer (dpy, CurrentTime);
+		int DGAflags = 0;
+		if (dgakeyb)
+			DGAflags = XF86DGADirectKeyb;
+		XF86DGADirectVideo (dpy, DefaultScreen(dpy), DGAflags);
+		dgamouse = false;
+	}
+	else
+	{
+		// nothing to do for nodga mouse right now
+	}
+}
+
+static void install_keyboard_grab (void)
+{
+	if (!COM_CheckParm("-nodga") && !COM_CheckParm("-nokbdga"))
+	{
+		XF86DGADirectVideo (dpy, DefaultScreen(dpy), XF86DGADirectKeyb);
+		XGrabKeyboard (dpy, win, False, GrabModeAsync, GrabModeAsync, CurrentTime);
+		dgakeyb = true;
+	}
+	else
+	{
+		// if not using DGA, we only have to grab the keyboard in fullscreen mode.
+		// Otherwise it is not necessary. In fact it is even useful to not grab it,
+		// because that means we can still Alt+Tab out of the window (and use other
+		// similar key combinations)
+		if (fullscreen)
+			XGrabKeyboard (dpy, win, False, GrabModeAsync, GrabModeAsync, CurrentTime);
+	}
 }
 
 static void uninstall_grabs (void)
@@ -274,6 +300,7 @@ static void uninstall_grabs (void)
 
 	XUngrabPointer (dpy, CurrentTime);
 	XUngrabKeyboard (dpy, CurrentTime);
+	XSelectInput (dpy, win, 0);
 }
 
 qboolean OnChange_windowed_mouse (cvar_t *var, char *value)
@@ -364,9 +391,9 @@ static void GetEvent (void)
 		old_windowed_mouse = _windowed_mouse.value;
 
 		if (!_windowed_mouse.value)
-			uninstall_grabs ();
+			uninstall_mouse_grab ();
 		else
-			install_grabs ();
+			install_mouse_grab ();
 	}
 }
 
@@ -673,6 +700,9 @@ void VID_Init (unsigned char *palette)
 		// Move the viewport to top left
 		XF86VidModeSetViewPort (dpy, scrnum, 0, 0);
 	}
+
+	XSelectInput (dpy, win, X_MASK);
+	install_keyboard_grab();
 
 	XFlush (dpy);
 
