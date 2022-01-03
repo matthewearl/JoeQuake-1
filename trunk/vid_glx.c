@@ -316,6 +316,7 @@ qboolean OnChange_windowed_mouse (cvar_t *var, char *value)
 	return false;
 }
 
+static qboolean keyboard_inited = false;
 static void GetEvent (void)
 {
 	XEvent	event;
@@ -398,6 +399,12 @@ static void GetEvent (void)
 			break;
 		}
 		break;
+	}
+
+	if (!keyboard_inited)
+	{
+		install_keyboard_grab();
+		keyboard_inited = true;
 	}
 
 	if (old_windowed_mouse != _windowed_mouse.value)
@@ -724,7 +731,6 @@ void VID_Init (unsigned char *palette)
 	}
 
 	XSelectInput (dpy, win, X_MASK|FocusChangeMask);
-	install_keyboard_grab();
 
 	XFlush (dpy);
 
