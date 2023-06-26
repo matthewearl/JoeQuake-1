@@ -76,6 +76,8 @@ typedef struct texture_s
 	unsigned	width, height;
 	int			gl_texturenum;
 	int			fb_texturenum;			// index of fullbright mask or 0
+	int			warp_texturenum;
+	qboolean	update_warp;			//johnfitz -- update warp this frame
 	struct msurface_s *texturechains[2];
 	int			anim_total;				// total tenths in sequence (0 = no)
 	int			anim_min, anim_max;		// time for this frame min <=time< max
@@ -124,6 +126,7 @@ typedef struct glpoly_s
 	struct glpoly_s *luma_chain;		// next luma poly in chain
 	struct glpoly_s	*caustics_chain;	// next caustic poly in chain
 	struct glpoly_s	*detail_chain;		// next detail poly in chain
+	struct glpoly_s	*outline_chain;		// next outline poly in chain
 	int			numverts;
 	float		verts[4][VERTEXSIZE];	// variable sized (xyz s1t1 s2t2)
 } glpoly_t;
@@ -584,6 +587,7 @@ typedef struct model_s
 	char		*entities;
 
 	qboolean	isworldmodel;
+	qboolean	haslitwater;
 
 	unsigned int meshvbo;
 	unsigned int meshindexesvbo;

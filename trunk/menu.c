@@ -320,8 +320,8 @@ qboolean M_Mouse_Select(const menu_window_t *uw, const mouse_state_t *m, int ent
 	if (m->x < w->x || m->y < w->y || m->x > w->x + w->w || m->y > w->y + w->h)
 		return false; // no, it's not
 
-	entryheight = w->h / entries;
-	nentry = (int)(m->y - w->y) / (int)entryheight;
+	entryheight = (double)w->h / (double)entries;
+	nentry = (int)((m->y - w->y) / entryheight);
 
 	*newentry = bound(0, nentry, entries - 1);
 
@@ -347,8 +347,8 @@ qboolean M_Mouse_Select_Column(const menu_window_t *uw, const mouse_state_t *m, 
 	//if (m->x < w->x || m->y < w->y || m->x > w->x + w->w || m->y > w->y + w->h)
 	//	return false; // no, it's not
 
-	entrywidth = w->w / entries;
-	nentry = (int)(m->x - w->x) / (int)entrywidth;
+	entrywidth = (double)w->w / (double)entries;
+	nentry = (int)((m->x - w->x) / entrywidth);
 
 	*newentry = bound(0, nentry, entries - 1);
 
@@ -371,12 +371,12 @@ qboolean M_Mouse_Select_RowColumn(const menu_window_t *uw, const mouse_state_t *
 	if (m->x < w->x || m->y < w->y || m->x > w->x + w->w || m->y > w->y + w->h)
 		return false; // no, it's not
 
-	entryheight = w->h / row_entries;
-	nentry = (int)(m->y - w->y) / (int)entryheight;
+	entryheight = (double)w->h / (double)row_entries;
+	nentry = (int)((m->y - w->y) / entryheight);
 	*newentry_row = bound(0, nentry, row_entries - 1);
 
-	entrywidth = w->w / col_entries;
-	nentry = (int)(m->x - w->x) / (int)entrywidth;
+	entrywidth = (double)w->w / (double)col_entries;
+	nentry = (int)((m->x - w->x) / entrywidth);
 	*newentry_col = bound(0, nentry, col_entries - 1);
 
 	return true;
@@ -520,27 +520,27 @@ static char *toYellow (char *s)
 	return buf;
 }
 
-void M_List_Draw (char *title)
+void M_List_Draw (char *title, int top)
 {
 	int		i, y, num_elements, num_lines, lx = 0, ly = 0;
 	direntry_t	*d;
 
-	M_Print (140, 8, title);
+	M_Print (140, top - 16, title);
 	if (nehahra)
 	{
-		M_Print (8, 24, "\x1d\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1f");
+		M_Print (8, top, "\x1d\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1f");
 		num_elements = NUMNEHDEMOS;
 		num_lines = MAXNEHLINES;
 	}
 	else
 	{
-		M_Print (8, 24, "\x1d\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1f\x1d\x1e\x1e\x1e\x1e\x1e\x1f");
+		M_Print (8, top, "\x1d\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1e\x1f\x1d\x1e\x1e\x1e\x1e\x1e\x1f");
 		d = filelist + list_base;
 		num_elements = num_files;
 		num_lines = MAXLINES;
 	}
 
-	for (i = 0, y = 32 ; i < num_elements - list_base && i < num_lines ; i++, y += 8)
+	for (i = 0, y = top + 8 ; i < num_elements - list_base && i < num_lines ; i++, y += 8)
 	{
 		if (nehahra)
 		{
@@ -579,15 +579,15 @@ void M_List_Draw (char *title)
 	list_window.w = (24 + 17) * 8; // presume 8 pixels for each letter
 	list_window.h = ly - list_window.y + 8;
 
-	M_DrawCharacter (8, 32 + list_cursor*8, 12 + ((int)(realtime*4)&1));
+	M_DrawCharacter (8, top + 8 + list_cursor*8, 12 + ((int)(realtime*4)&1));
 
 	if (searchbox)
 	{
-		M_PrintWhite (24, 48 + 8*MAXLINES, "search: ");
-		M_DrawTextBox (80, 40 + 8*MAXLINES, 16, 1);
-		M_PrintWhite (88, 48 + 8*MAXLINES, searchfile);
+		M_PrintWhite (24, top + 24 + 8*MAXLINES, "search: ");
+		M_DrawTextBox (80, top + 16 + 8*MAXLINES, 16, 1);
+		M_PrintWhite (88, top + 24 + 8*MAXLINES, searchfile);
 
-		M_DrawCharacter (88 + 8*strlen(searchfile), 48 + 8*MAXLINES, ((int)(realtime*4)&1) ? 11 + (84*key_insert) : 10);
+		M_DrawCharacter (88 + 8*strlen(searchfile), top + 24 + 8*MAXLINES, ((int)(realtime*4)&1) ? 11 + (84*key_insert) : 10);
 	}
 }
 
@@ -3139,6 +3139,8 @@ menu_window_t hud_slider_consize_window;
 menu_window_t hud_slider_conspeed_window;
 menu_window_t hud_slider_conalpha_window;
 
+const float scr_sbarscale_amount_max = 6.0f;
+
 #define CONSOLE_SPEED_ITEMS 5
 float console_speed_values[CONSOLE_SPEED_ITEMS] = { 200, 500, 1000, 5000, 99999 };
 
@@ -3310,7 +3312,7 @@ void M_Hud_Draw(void)
 	M_DrawPic((320 - p->width) >> 1, 4, p);
 
 	M_Print_GetPoint(16, 32, &hud_window.x, &hud_window.y, "     Hud/Console scale", hud_cursor == 0);
-	r = (scr_sbarscale_amount.value - 1) / 3;
+	r = (scr_sbarscale_amount.value - 1) / (scr_sbarscale_amount_max - 1.0f);
 	M_DrawSliderFloat(220, 32, r, scr_sbarscale_amount.value, &hud_slider_sbarscale_window);
 
 	M_Print_GetPoint(16, 40, &lx, &ly, "             Hud style", hud_cursor == 1);
@@ -3401,7 +3403,7 @@ void M_Hud_KeyboardSlider(int dir)
 	{
 	case 0:	// sbar scale
 		scr_sbarscale_amount.value += dir * 0.5;
-		scr_sbarscale_amount.value = bound(1, scr_sbarscale_amount.value, 4);
+		scr_sbarscale_amount.value = bound(1, scr_sbarscale_amount.value, scr_sbarscale_amount_max);
 		Cvar_SetValue(&scr_sbarscale_amount, scr_sbarscale_amount.value);
 		break;
 
@@ -3612,7 +3614,7 @@ void M_Hud_MouseSlider(int k, const mouse_state_t *ms)
 		{
 		case 0:	// sbar scale
 			M_Mouse_Select_Column(&hud_slider_sbarscale_window, ms, 7, &slider_pos);
-			scr_sbarscale_amount.value = bound(1, (slider_pos * 0.5) + 1, 4);
+			scr_sbarscale_amount.value = bound(1, (slider_pos * 0.5) + 1, scr_sbarscale_amount_max);
 			Cvar_SetValue(&scr_sbarscale_amount, scr_sbarscale_amount.value);
 			break;
 
@@ -6108,7 +6110,7 @@ void M_Menu_Maps_f (void)
 
 void M_Maps_Draw (void)
 {
-	M_List_Draw ("MAPS");
+	M_List_Draw ("MAPS", 24);
 }
 
 void M_Maps_Key (int k)
@@ -6217,7 +6219,7 @@ void M_Menu_NehDemos_f (void)
 
 void M_NehDemos_Draw (void)
 {
-	M_List_Draw ("DEMOS");
+	M_List_Draw ("DEMOS", 24);
 }
 
 void M_NehDemos_Key (int k)
@@ -6270,8 +6272,38 @@ void M_Menu_Demos_f (void)
 
 void M_Demos_Draw (void)
 {
+	int ghost_text_y = 8 * (MAXLINES + 6);
+	int ghost_text_x;
+	int help_text_x = 28;
+	int help_text_y = 8 * (MAXLINES + 8);
+	char *ghost_demo_path_short;
+
+	// Current directory
 	M_Print (16, 16, demodir);
-	M_List_Draw ("DEMOS");
+
+	// The file list itself
+	M_List_Draw ("DEMOS", 24);
+
+	// Current ghost
+	if (ghost_demo_path[0] != '\0') {
+		ghost_demo_path_short = ghost_demo_path;
+		if (strncmp(ghost_demo_path, "../", 3) == 0) {
+			ghost_demo_path_short += 2;
+		}
+		ghost_text_x = (320 - 8 * (7 + strlen(ghost_demo_path_short))) / 2;
+		M_PrintWhite (ghost_text_x, ghost_text_y, "ghost: ");
+		M_Print (ghost_text_x + 8 * 7, ghost_text_y, ghost_demo_path_short);
+	}
+
+	// Keyboard shortcut help text
+	M_PrintWhite (help_text_x, help_text_y,
+			      "enter:       ctrl-enter:          ");
+	M_Print(help_text_x, help_text_y,
+			      "       play              set ghost");
+	M_PrintWhite (help_text_x, help_text_y + 8,
+			      "  ctrl-shift-enter:            ");
+	M_Print(help_text_x, help_text_y + 8,
+			      "                    clear ghost");
 }
 
 void M_Demos_Key (int k)
@@ -6301,7 +6333,11 @@ void M_Demos_Key (int k)
 		if (!num_files || filelist[list_base+list_cursor].type == 3)
 			break;
 
-		if (filelist[list_cursor+list_base].type)
+		if (keydown[K_CTRL] && keydown[K_SHIFT])
+		{
+			Cbuf_AddText ("ghost_remove\n");
+		}
+		else if (filelist[list_cursor+list_base].type)
 		{
 			if (filelist[list_base+list_cursor].type == 2)
 			{
@@ -6321,9 +6357,16 @@ void M_Demos_Key (int k)
 		}
 		else
 		{
-			key_dest = key_game;
-			m_state = m_none;
-			Cbuf_AddText (va("playdemo \"..%s/%s\"\n", demodir, filelist[list_base+list_cursor].name));
+			if (keydown[K_CTRL] && !keydown[K_SHIFT])
+			{
+				Cbuf_AddText (va("ghost \"..%s/%s\"\n", demodir, filelist[list_base+list_cursor].name));
+			}
+			else
+			{
+				key_dest = key_game;
+				m_state = m_none;
+				Cbuf_AddText (va("playdemo \"..%s/%s\"\n", demodir, filelist[list_base+list_cursor].name));
+			}
 			Q_strncpyz (prevdir, filelist[list_base+list_cursor].name, sizeof(prevdir));
 		}
 
@@ -6350,7 +6393,7 @@ void M_Demos_Key (int k)
 				worx = true;
 				S_LocalSound ("misc/menu1.wav");
 				list_base = i - 10;
-				if (list_base < 0)
+				if (list_base < 0 || num_files < MAXLINES)
 				{
 					list_base = 0;
 					list_cursor = i;
@@ -6404,13 +6447,14 @@ void M_Menu_Mods_f(void)
 
 void M_Mods_Draw(void)
 {
-	M_List_Draw("MODS");
+	M_List_Draw("MODS", 24);
 }
 
 void M_Mods_Key(int k)
 {
 	int		i;
 	qboolean	worx;
+	extern void Draw_ReloadPics(void);
 
 	M_List_Key(k, num_files, MAXLINES);
 
@@ -6437,6 +6481,9 @@ void M_Mods_Key(int k)
 		key_dest = key_game;
 		m_state = m_none;
 		Cbuf_AddText(va("disconnect\ngamedir %s\nexec quake.rc\n", filelist[list_base + list_cursor].name));
+		Cbuf_Execute();
+		Draw_ReloadPics();
+
 		Q_strncpyz(prevdir, filelist[list_base + list_cursor].name, sizeof(prevdir));
 
 		if (searchbox)

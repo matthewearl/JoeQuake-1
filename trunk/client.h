@@ -19,6 +19,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 // client.h
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 typedef struct
 {
 	vec3_t	viewangles;
@@ -116,6 +120,7 @@ typedef enum
 	ca_disconnected, 	// full screen console with no connection
 	ca_connected		// valid netcon, talking to a server
 } cactive_t;
+
 
 // the client_static_t structure is persistant through an arbitrary number
 // of server connections
@@ -217,7 +222,7 @@ typedef struct
 	struct model_s	*model_precache[MAX_MODELS];
 	struct sfx_s	*sound_precache[MAX_SOUNDS];
 
-	char		levelname[40];		// for display on solo scoreboard
+	char		levelname[128];	// for display on solo scoreboard //johnfitz -- was 40.
 	int		viewentity;		// cl_entities[cl.viewentity] = player
 	int		maxclients;
 	int		gametype;
@@ -304,6 +309,7 @@ dlight_t *CL_AllocDlight (int key);
 void CL_DecayLights (void);
 
 void CL_Init (void);
+void CL_Shutdown (void);
 
 void CL_EstablishConnection (char *host);
 void CL_Signon1 (void);
@@ -365,6 +371,8 @@ void CL_BaseMove (usercmd_t *cmd);
 float CL_KeyState (kbutton_t *key);
 
 // cl_demo.c
+void CL_InitDemo(void);
+void CL_ShutdownDemo (void);
 void CL_StopPlayback (void);
 int CL_GetMessage (void);
 void CL_Stop_f (void);
@@ -372,6 +380,7 @@ void CL_Record_f (void);
 void CL_PlayDemo_f (void);
 void CL_TimeDemo_f(void);
 void CL_KeepDemo_f (void);
+int CL_DemoIntermissionState (int old_state, int new_state);
 
 // cl_parse.c
 void CL_ParseServerMessage (void);
@@ -395,6 +404,46 @@ void CL_ParseTEnt (void);
 void CL_UpdateTEnts (void);
 entity_t *CL_NewTempEntity (void);
 qboolean TraceLineN (vec3_t start, vec3_t end, vec3_t impact, vec3_t normal);
+
+
+// cl_dzip.c
+typedef enum {
+	DZIP_INVALID,
+	DZIP_NOT_EXTRACTING,
+	DZIP_NO_EXIST,
+	DZIP_ALREADY_EXTRACTING,
+	DZIP_EXTRACT_IN_PROGRESS,
+	DZIP_EXTRACT_FAIL,
+	DZIP_EXTRACT_SUCCESS,
+} dzip_status_t;
+typedef struct {
+	qboolean initialized;
+
+    // If true files will be extracted into a temporary directory.  If false,
+    // files will be extracted into the same directory as the dzip file.
+    qboolean use_temp_dir;
+
+	// Directory into which dzip files will be extracted.
+	char extract_dir[1024];
+
+	// Full path of the extracted demo file.
+	char dem_path[1024];
+
+	// When opened, file pointer will be put here.
+	FILE **demo_file_p;
+
+#ifdef _WIN32
+	HANDLE proc;
+#else
+	qboolean proc;
+#endif
+} dzip_context_t;
+void DZip_Init (dzip_context_t *ctx, const char *prefix);
+dzip_status_t DZip_StartExtract (dzip_context_t *ctx, const char *name, FILE **demo_file_p);
+dzip_status_t DZip_CheckCompletion (dzip_context_t *ctx);
+dzip_status_t DZip_Open(dzip_context_t *ctx, const char *name, FILE **demo_file_p);
+void DZip_Cleanup(dzip_context_t *ctx);
+
 
 #ifdef GLQUAKE
 dlighttype_t SetDlightColor (float f, dlighttype_t def, qboolean random);

@@ -1958,19 +1958,21 @@ void VID_MenuDraw (void)
 	for (i = 0 ; i < vid_wmodes ; i++)
 	{
 		if (modedescs[i].iscur)
-			M_Print (column, row, modedescs[i].desc);
+			M_Print_GetPoint(column, row, &lx, &ly, modedescs[i].desc, true);
 		else
 			M_Print_GetPoint(column, row, &lx, &ly, modedescs[i].desc, video_cursor_row == ((row - 32) / 8) && video_cursor_column == (column / (14 * 8)));
 
 		column += 14 * 8;
 
-		if ((i % VID_ROW_SIZE) == (VID_ROW_SIZE - 1))
+		// if we are at the end of the curent row (last column), prepare for next row
+		if (((i + 1) % VID_ROW_SIZE) == 0)
 		{
 			column = 0;
 			row += 8;
 		}
 		
-		if ((i % VID_ROW_SIZE) == (VID_ROW_SIZE - 2))
+		// if we just started a new row, increment row counter
+		if (((i + 1) % VID_ROW_SIZE) == 1)
 		{
 			video_mode_rows++;
 		}

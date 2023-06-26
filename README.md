@@ -103,6 +103,10 @@ with the specified number, "2" by default.
 
 Toggles between transparent (0), old/original (1) and alternative (2) huds, 0 by default.
 
+### `scr_scorebarmode`
+
+Toggles between vanilla (0) and QuakeSpasm (1) style scorebar layouts, 0 by default.
+
 ### `v_gunkick`
 
 Turns weapon's jarring every time when firing on/off, 0 by default.
@@ -246,7 +250,7 @@ Values < 1 mean slow motion, while > 1 result fast forward.
 
 Turns on automatic demo recording.
 If cl_autodemo is 1 and cl_autodemo_name is empty, a new .dem file is recorded at
-every level start. the file naming format is `<map_name>_<date_of_recording>_<time_of_recording>.dem`
+every level start. The file naming format is `<map_name>_<date_of_recording>_<time_of_recording>.dem`
 If cl_autodemo is 1 and cl_autodemo_name is not empty, the `<cl_autodemo_name>.dem` file is recorded
 at every level start. To save the current recording session, use the 'keepdemo' command.
 This command is only valid on the intermission/finale screen and renames the temporary recording using the
@@ -308,6 +312,10 @@ Toggles between old and new style weapon bobbing, "0" by default.
 
 Console notify messages are shown on the intermission screen, "0" by default.
 
+### `con_logcenterprint`
+
+Centerprinted messages are shown in the console, "0" by default.
+
 ### `gl_fb_bmodels`
 
 Turn fullbright polys on brush models on/off, 1 by default.
@@ -355,6 +363,22 @@ Default value is "0.5".
 Ignores drawing shadow for mdl files added to this list.
 Default value is "" (empty list).
 
+### `r_oldwater`
+
+Since version 0.17.4 water surfaces are drawn via the frame buffer.
+Switching this setting on reverts to the original water surface rendering method.
+0 by default.
+
+### `r_litwater`
+
+When switched on, water surfaces are lit on compatible maps.
+1 by default.
+
+### `r_waterquality`
+Specifies the quality (tesselation level) of the water surfaces' warping animation.
+Can be between 3 and 64.
+8 by default.
+
 ### `capture_codec`
 
 Contains the fourcc code of video codec's, 0 by default (no compression).
@@ -391,6 +415,27 @@ than one AVI file. The used video capture module has a problem with files
 getting corrupted when reaching a size of over 2 gigabytes, so splitting them
 into smaller files is a good idea to avoid this corruption. Default is
 1900 megabytes. Setting to 0 disables splitting.
+
+### `gl_interpolate_animation`
+
+Sets lerped model animation.
+Possible values are:
+0 - Animations are not lerped (original "software" Quake behavior)
+1 - Animations are lerped except weapon muzzleflash animations
+2 - Animations are lerped including weapon muzzleflash animations
+Default value is "1".
+
+### `gl_interpolate_movement`
+
+Switches on lerped model movement, default value is "1" (on).
+
+### `gl_interpolate_distance`
+
+Sets the maximum distance between vertexes where animation lerping takes place.
+This variable was implemented exclusively for gl_interpolate_animation, when used with the value "2".
+It is rather a technical thing, it serves fine-tuning of muzzleflash animations.
+If you're not entirely familiar of this feature I recommend not adjusting it.
+Its default value is 135. It cannot be set higher than 300.
 
 ### `gl_externaltextures_world` and `gl_externaltextures_bmodels`
 
@@ -561,6 +606,11 @@ default.
 Set texture filtering mode for sky textures. Valid modes: `GL_LINEAR` and
 `GL_NEAREST`, `GL_LINEAR` by default.
 
+### `gl_zfix`
+
+Tries to prevent overlapping textures (z-fighting fix).
+0 by default.
+
 ### `net_connectsearch`
 
 Allows to enable or disable the search for hosts on use of the `connect`
@@ -578,6 +628,27 @@ can therefore speed up connecting to a server significantly. As there will
 barely be any usecase for the domain names, it is "0" by default. Set to "1" to
 restore the original Quake behaviour with the lookups enabled.
 
+### `sv_altnoclip`
+
+Switches on alternative noclip movement where the player always moves towards
+the direction he's looking at.
+1 by default.
+
+### `fog_custom`
+
+Can store custom fog parameters which are only applied if the `fog_override` variable is set to 1.
+The values must be specified the following way: `<density> <red> <green> <blue>`
+`<density>` defines the thickness of the fog.
+`<red> <green> <blue>` values define the color of the fog.
+Default value is "0 0 0 0", which means:
+0 density (invisible)
+RGB: 0 0 0 (black color)
+
+### `fog_override`
+
+Overrides the default fog parameters with the ones defined by the `fog_custom` variable.
+0 by default.
+
 ## New commands
 
 ### `cmdlist`
@@ -587,6 +658,10 @@ Lists all console commands.
 ### `cvarlist`
 
 Lists all console variables.
+
+### `find`, `apropos`
+
+Finds all relevant console commands and variables.
 
 ### `gamedir <path>`
 
@@ -689,6 +764,37 @@ Usage:
 `fog <density> <red> <green> <blue>`
 `<density>` defines the thickness of the fog.
 `<red> <green> <blue>` values define the color of the fog.
+
+### `fog_set`
+
+Saves the actual fog values (set at map start) to the `fog_custom` variable.
+
+### `printspawnparams [clientnum]`
+
+Prints the spawn parameters of clients on the server. If `clientnum` is given,
+prints the spawn parameters for the client with that number. If it is not given,
+prints the spawn parameters for all active clients on the server.
+
+### `setspawnparam <paramnum> <value> [clientnum]`
+
+Sets the spawn parameter with index `paramnum` to `value`. If `clientnum` is
+given, the spawn parameter of the client with that number is changed. If it is
+not given, the spawn parameter of the host is changed.
+
+### `writenextspawnparams [clientnum] [filename]`
+
+Writes a config to store the spawn parameters as they would be if the current
+map is finished as is. Can be executed to start playing the next map with those
+stored spawn parameters.
+
+If this client is not the server host, the spawn parameters of this client are
+written and assigned to the number `clientnum` (`0` if not given). If this
+client is the server host, writes spawn parameters of the client with number
+`clientnum`. If `clientnum` is not given, writes the spawn parameters for all
+active clients on the server.
+
+The name of the written config file can be given as `filename`. If not present,
+an automatic name based on current map and time is used.
 
 ## Other features
 
@@ -799,6 +905,47 @@ The client can operate as many fps as possible, so users can for example match t
 desired max fps to their monitor's refresh rate to achieve a much smoother gameplay
 experience.
 
+### Ghost recording
+
+The ghost feature shows the player from a demo file while you are playing the
+game or watching another demo file.  This is useful for speedruns to know where
+you are relative to a reference demo, and to indicate where you could be faster.
+
+#### Setting a ghost from the demo menu
+
+From the demo menu, press ctrl-enter to set a demo file as a ghost, and
+ctrl-shift-enter to remove the ghost.
+
+#### Commands
+
+- `ghost <demo-file>`:  Add ghost from the given demo file.  The ghost will be
+  loaded on next map load.  With no arguments it will show the current ghost's
+  demo file, if any.  Only one ghost may be added at a time.
+- `ghost_remove`: Remove the current ghost, if any is added.  The change will
+  take effect on next map load.
+- `ghost_shift <t>`: Shift the ghost to be the given number of seconds infront
+  of the player.  Useful if you lose the ghost but you still want to see its
+  route.
+- `ghost_shift_reset`: Undo the effect of `ghost_shift`, and put the ghost back
+  to its correct position.
+
+#### Cvars
+
+- `ghost_delta [0|1]`: Show how far ahead or behind the ghost you currently are.
+  This is unaffected by `ghost_shift`.
+- `ghost_range <distance>`:  Hide the ghost when it is within this distance.
+- `ghost_alpha <float>`: Change how transparent the ghost is.  `0` is fully
+  transparent, `1` is fully opaque.
+- `ghost_marathon_split`: When set to `1`, show the live marathon split, rather
+  than the level split. Default `0`.
+
+#### Marathon split times
+
+When a ghost is loaded a split time is printed to the console at the end of each
+level.  If a marathon demo is loaded as the ghost, and the player is also
+running a marathon, then split times for each level are shown.  Splits are also
+shown when playing a demo with a ghost loaded.
+
 ## NOTE for linux GLX users
 
 You need to have GLX installed and set up correctly. To install GLX, you need
@@ -817,9 +964,15 @@ You may freely redistribute or modify JoeQuake as you wish.
 I would like to thank the following people for using their stuff:
 
 * Sphere, for his help and participation in development of JoeQuake 🖤
+* Matthew "kipi" Earl for ghost mode recording
 * A. "Fuh" Nourai, for every FuhQuake addition
 * Anton "Tonik" Gavrilov, for every ZQuake addition
-* John Fitzgibbons, Eric Wasylishen, Spike and all the QuakeSpasm devs for every QS addition
+* QuakeSpasm devs for every QS addition and their useful hints, tips
+	* John Fitzgibbons
+	* Eric Wasylishen
+	* Axel Gneiting
+	* Andrei Drexler
+	* Spike
 * Creators of the Minizip library: http://www.winimage.com/zLibDll/minizip.html
 * fenix@io.com, for alias model interpolation
 * LordHavoc, for lerping alias model textures

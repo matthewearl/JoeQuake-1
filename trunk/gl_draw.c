@@ -89,7 +89,7 @@ static	int	gl_filter_minmax_hud = GL_LINEAR;
 extern	byte	vid_gamma_table[256];
 extern	float	vid_gamma;
 
-#define	NUMCROSSHAIRS	6
+#define	NUMCROSSHAIRS	7
 int		crosshairtextures[NUMCROSSHAIRS];
 
 static byte crosshairdata[NUMCROSSHAIRS][64] = {
@@ -145,7 +145,16 @@ static byte crosshairdata[NUMCROSSHAIRS][64] = {
 	0xfe, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe,
 	0xff, 0xfe, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xff,
 	0xff, 0xfe, 0xfe, 0xff, 0xff, 0xfe, 0xfe, 0xff,
-	0xff, 0xff, 0xff, 0xfe, 0xfe, 0xff, 0xff, 0xff
+	0xff, 0xff, 0xff, 0xfe, 0xfe, 0xff, 0xff, 0xff,
+
+	0xff, 0xff, 0xff, 0xfe, 0xff, 0xff, 0xff, 0xff,
+	0xff, 0xff, 0xff, 0xfe, 0xff, 0xff, 0xff, 0xff,
+	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+	0xfe, 0xfe, 0xff, 0xff, 0xff, 0xfe, 0xfe, 0xff,
+	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+	0xff, 0xff, 0xff, 0xfe, 0xff, 0xff, 0xff, 0xff,
+	0xff, 0xff, 0xff, 0xfe, 0xff, 0xff, 0xff, 0xff,
+	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff
 };
 
 typedef struct
@@ -164,6 +173,8 @@ gltexture_t	gltextures[MAX_GLTEXTURES];
 int		numgltextures;
 
 int		currenttexture = -1;		// to avoid unnecessary texture sets
+
+canvastype currentcanvas = CANVAS_NONE; //johnfitz -- for GL_SetCanvas
 
 void GL_Bind (int texnum)
 {
@@ -1392,29 +1403,46 @@ void Draw_TileClear (int x, int y, int w, int h)
 
 /*
 =============
+Draw_AlphaFill
+
+Fills a box of pixels with a transparent color
+=============
+*/
+void Draw_AlphaFill(int x, int y, int w, int h, int c, float alpha)
+{
+	float	sbar_scale;
+	byte*	pal = (byte*)d_8to24table; //johnfitz -- use d_8to24table instead of host_basepal
+
+	sbar_scale = Sbar_GetScaleAmount();
+
+	glDisable(GL_TEXTURE_2D);
+	glEnable(GL_BLEND); //johnfitz -- for alpha
+	glDisable(GL_ALPHA_TEST); //johnfitz -- for alpha
+	glColor4f(pal[c * 4] / 255.0, pal[c * 4 + 1] / 255.0, pal[c * 4 + 2] / 255.0, alpha); //johnfitz -- added alpha
+
+	glBegin(GL_QUADS);
+	glVertex2f(x, y);
+	glVertex2f(x + (int)(w * sbar_scale), y);
+	glVertex2f(x + (int)(w * sbar_scale), y + (int)(h * sbar_scale));
+	glVertex2f(x, y + (int)(h * sbar_scale));
+	glEnd();
+
+	glDisable(GL_BLEND); //johnfitz -- for alpha
+	glEnable(GL_ALPHA_TEST); //johnfitz -- for alpha
+	glEnable(GL_TEXTURE_2D);
+	glColor3ubv(color_white);
+}
+
+/*
+=============
 Draw_Fill
 
 Fills a box of pixels with a single color
 =============
 */
-void Draw_Fill (int x, int y, int w, int h, int c)
+void Draw_Fill(int x, int y, int w, int h, int c)
 {
-	float	sbar_scale;
-
-	sbar_scale = Sbar_GetScaleAmount();
-
-	glDisable (GL_TEXTURE_2D);
-	glColor3f (host_basepal[c*3] / 255.0, host_basepal[c*3+1] / 255.0, host_basepal[c*3+2] / 255.0);
-
-	glBegin (GL_QUADS);
-	glVertex2f (x, y);
-	glVertex2f (x + (int)(w * sbar_scale), y);
-	glVertex2f (x + (int)(w * sbar_scale), y + (int)(h * sbar_scale));
-	glVertex2f (x, y + (int)(h * sbar_scale));
-	glEnd ();
-
-	glEnable (GL_TEXTURE_2D);
-	glColor3ubv (color_white);
+	Draw_AlphaFill(x, y, w, h, c, 255.0);
 }
 
 //=============================================================================
@@ -1482,6 +1510,39 @@ void Draw_EndDisc (void)
 
 /*
 ================
+GL_SetCanvas -- johnfitz -- support various canvas types
+================
+*/
+void GL_SetCanvas(canvastype newcanvas)
+{
+	if (newcanvas == currentcanvas)
+		return;
+
+	currentcanvas = newcanvas;
+
+	glMatrixMode(GL_PROJECTION);
+	glLoadIdentity();
+
+	switch (newcanvas)
+	{
+	case CANVAS_DEFAULT:
+		glOrtho(0, glwidth, glheight, 0, -99999, 99999);
+		glViewport(glx, gly, glwidth, glheight);
+		break;
+	case CANVAS_WARPIMAGE:
+		glOrtho(0, 128, 0, 128, -99999, 99999);
+		glViewport(glx, gly + glheight - gl_warpimagesize, gl_warpimagesize, gl_warpimagesize);
+		break;
+	default:
+		Sys_Error("GL_SetCanvas: bad canvas type");
+	}
+
+	glMatrixMode(GL_MODELVIEW);
+	glLoadIdentity();
+}
+
+/*
+================
 GL_Set2D
 
 Setup as if the screen was 320*200
@@ -1489,20 +1550,13 @@ Setup as if the screen was 320*200
 */
 void GL_Set2D (void)
 {
-	glViewport (glx, gly, glwidth, glheight);
-
-	glMatrixMode (GL_PROJECTION);
-	glLoadIdentity ();
-	glOrtho (0, vid.width, vid.height, 0, -99999, 99999);
-
-	glMatrixMode (GL_MODELVIEW);
-	glLoadIdentity ();
+	currentcanvas = CANVAS_INVALID;
+	GL_SetCanvas(CANVAS_DEFAULT);
 
 	glDisable (GL_DEPTH_TEST);
 	glDisable (GL_CULL_FACE);
 	glDisable (GL_BLEND);
 	glEnable (GL_ALPHA_TEST);
-
 	glColor3ubv (color_white);
 }
 
@@ -1775,6 +1829,12 @@ void GL_Upload32 (unsigned *data, int width, int height, int mode)
 
 		glTexParameterf (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, gl_filter_min);
 		glTexParameterf (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, gl_filter_max);
+
+		if (!qglGenerateMipmap)
+		{
+			// whenever texture level 0 is updated, the mipmaps will all be regenerated: https://www.khronos.org/opengl/wiki/Common_Mistakes#Legacy_Generation
+			glTexParameteri(GL_TEXTURE_2D, GL_GENERATE_MIPMAP, GL_TRUE);
+		}
 	}
 	else
 	{

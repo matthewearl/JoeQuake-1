@@ -154,10 +154,12 @@ extern	refdef_t	r_refdef;
 extern	mleaf_t		*r_viewleaf, *r_oldviewleaf;
 extern	mleaf_t		*r_viewleaf2, *r_oldviewleaf2;	// for watervis hack
 extern	texture_t	*r_notexture_mip;
+extern	texture_t	*r_notexture_mip2;
 extern	int		d_lightstylevalue[256];	// 8.8 fraction of base light value
 
 extern	int	currenttexture;
 extern	int	particletexture;
+extern	int	particletexture2;
 extern	int	playertextures;
 extern	int	skyboxtextures;
 extern	int	underwatertexture, detailtexture;
@@ -173,6 +175,7 @@ extern	cvar_t	r_fullbright;
 extern	cvar_t	r_lightmap;
 extern	cvar_t	r_shadows;
 extern	cvar_t	r_wateralpha;
+extern	cvar_t	r_litwater;
 extern	cvar_t	r_dynamic;
 extern	cvar_t	r_novis;
 extern	cvar_t	r_fullbrightskins;
@@ -181,6 +184,8 @@ extern	cvar_t	r_skycolor;
 extern	cvar_t	r_drawflame;
 extern	cvar_t	r_skybox;
 extern	cvar_t	r_farclip;
+extern	cvar_t	r_outline;
+extern	cvar_t	r_outline_surf;
 extern	cvar_t	r_scale;
 
 extern	cvar_t	gl_clear;
@@ -195,6 +200,8 @@ extern	cvar_t	gl_nocolors;
 extern	cvar_t	gl_loadlitfiles;
 extern	cvar_t	gl_doubleeyes;
 extern	cvar_t	gl_interdist;
+extern	cvar_t	gl_interpolate_anims;
+extern	cvar_t	gl_interpolate_moves;
 extern  cvar_t  gl_waterfog;		
 extern  cvar_t  gl_waterfog_density;
 extern  cvar_t  gl_detail;
@@ -262,6 +269,9 @@ extern	const	char	*gl_extensions;
 
 void GL_Bind (int texnum);
 
+// Generate mipmaps
+typedef void (APIENTRY *lpGenerateMipmapFUNC)(GLenum);
+
 // Multitexture
 typedef void (APIENTRY *lpMTexFUNC)(GLenum, GLfloat, GLfloat);
 typedef void (APIENTRY *lpSelTexFUNC)(GLenum);
@@ -302,6 +312,8 @@ typedef void (APIENTRY *lpTexBufferFUNC) (GLenum target, GLenum internalformat, 
 typedef void (APIENTRY *lpBindBufferBaseFUNC) (GLenum target, GLuint index, GLuint buffer);
 typedef GLuint(APIENTRY *lpGetUniformBlockIndexFUNC) (GLuint program, const GLchar *uniformBlockName);
 typedef void (APIENTRY *lpUniformBlockBindingFUNC) (GLuint program, GLuint uniformBlockIndex, GLuint uniformBlockBinding);
+
+extern lpGenerateMipmapFUNC qglGenerateMipmap;
 
 extern lpMTexFUNC qglMultiTexCoord2f;
 extern lpSelTexFUNC qglActiveTexture;
@@ -371,6 +383,8 @@ int R_SetSky (char *skyname);
 void Sky_NewMap(void);
 void R_DrawSky(void);
 void R_InitSky(texture_t *mt);		// called at level load
+void R_UpdateWarpTextures(void);
+extern int gl_warpimagesize;
 
 // gl_draw.c
 extern	cvar_t	gl_texturemode;
@@ -379,6 +393,15 @@ extern	cvar_t	gl_texturemode_sky;
 void GL_Set2D (void);
 byte *StringToRGB(char *s);
 void Draw_LoadPics(void);
+void GL_SetCanvas(int newcanvas);
+
+//johnfitz -- stuff for 2d drawing control
+typedef enum {
+	CANVAS_NONE,
+	CANVAS_DEFAULT,
+	CANVAS_WARPIMAGE,
+	CANVAS_INVALID = -1
+} canvastype;
 
 // gl_rmain.c
 qboolean R_CullBox (vec3_t mins, vec3_t maxs);

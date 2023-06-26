@@ -317,7 +317,6 @@ size_t Q_strlcat(char *dst, const char *src, size_t siz)
 * will be copied.  Always NUL terminates (unless siz == 0).
 * Returns strlen(src); if retval >= siz, truncation occurred.
 */
-
 size_t Q_strlcpy(char *dst, const char *src, size_t siz)
 {
 	char *d = dst;
@@ -341,6 +340,46 @@ size_t Q_strlcpy(char *dst, const char *src, size_t siz)
 	}
 
 	return(s - src - 1);	/* count does not include NUL */
+}
+
+//joe: from QuakeSpasm
+char* Q_strcasestr(const char* haystack, const char* needle)
+{
+	int c1, c2, c2f;
+	int i;
+	c2f = *needle;
+	if (c2f >= 'a' && c2f <= 'z')
+		c2f -= ('a' - 'A');
+	if (!c2f)
+		return (char*)haystack;
+	while (1)
+	{
+		c1 = *haystack;
+		if (!c1)
+			return NULL;
+		if (c1 >= 'a' && c1 <= 'z')
+			c1 -= ('a' - 'A');
+		if (c1 == c2f)
+		{
+			for (i = 1; ; i++)
+			{
+				c1 = haystack[i];
+				c2 = needle[i];
+				if (c1 >= 'a' && c1 <= 'z')
+					c1 -= ('a' - 'A');
+				if (c2 >= 'a' && c2 <= 'z')
+					c2 -= ('a' - 'A');
+				if (!c2)
+					return (char*)haystack;	//end of needle means we found a complete match
+				if (!c1)	//end of haystack means we can't possibly find needle in it any more
+					return NULL;
+				if (c1 != c2)	//mismatch means no match starting at haystack[0]
+					break;
+			}
+		}
+		haystack++;
+	}
+	return NULL;	//didn't find it
 }
 
 /*
@@ -1110,7 +1149,7 @@ void COM_InitArgv (int argc, char **argv)
 	if (COM_CheckParm("-rogue"))
 		rogue = 1;
 
-	if (COM_CheckParm("-hipnotic"))
+	if (COM_CheckParm("-hipnotic") || COM_CheckParm("-quoth")) //johnfitz -- "-quoth" support
 		hipnotic = 1;
 
 	if (COM_CheckParm("-machine"))
@@ -1846,6 +1885,9 @@ void COM_SetGameDir (char *dir)
 		search->next = com_searchpaths;
 		com_searchpaths = search;               
 	}
+
+	// initializing demodir
+	Q_snprintfz(demodir, sizeof(demodir), "/%s", com_gamedirname);
 }
 
 /*
@@ -1923,6 +1965,8 @@ void COM_InitFilesystem (void)
 		COM_AddGameDirectory (va("%s/rogue", com_basedir));
 	if (COM_CheckParm("-hipnotic"))
 		COM_AddGameDirectory (va("%s/hipnotic", com_basedir));
+	if (COM_CheckParm("-quoth"))
+		COM_AddGameDirectory(va("%s/quoth", com_basedir));
 	if (COM_CheckParm("-machine"))
 		COM_AddGameDirectory(va("%s/mg1", com_basedir));
 

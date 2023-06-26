@@ -70,26 +70,31 @@ char *svc_strings[] =
 	"svc_hidelmp",		// [string] iconlabel
 	"svc_skybox",		// [string] skyname
 //johnfitz -- new server messages 
-	"", // 38
+	"svc_botchat", // 38 (2021 RE-RELEASE)
 	"", // 39
 	"svc_bf", // 40						// no data
 	"svc_fog", // 41					// [byte] density [byte] red [byte] green [byte] blue [float] time
 	"svc_spawnbaseline2", //42			// support for large modelindex, large framenum, alpha, using flags
 	"svc_spawnstatic2", // 43			// support for large modelindex, large framenum, alpha, using flags
 	"svc_spawnstaticsound2", //	44		// [coord3] [short] samp [byte] vol [byte] aten
-	"", // 45
-	"", // 46
-	"", // 47
-	"", // 48
-	"", // 49
-	"", // 50
-	"", // 51
-	"svc_achievement", // 52 -- used by the 2021 rerelease
-	"", // 53
-	"", // 54
-	"", // 55
 //johnfitz
+
+// 2021 RE-RELEASE:
+	"svc_setviews", // 45
+	"svc_updateping", // 46
+	"svc_updatesocial", // 47
+	"svc_updateplinfo", // 48
+	"svc_rawprint", // 49
+	"svc_servervars", // 50
+	"svc_seq", // 51
+	"svc_achievement", // 52
+	"svc_chat", // 53
+	"svc_levelcompleted", // 54
+	"svc_backtolobby", // 55
+	"svc_localsound" // 56
 };
+
+vec3_t		last_setangle;	//joe: for intermission cam fix
 
 //=============================================================================
 
@@ -187,6 +192,7 @@ entity_t *CL_EntityNum (int num)
 		while (cl.num_entities <= num)
 		{
 			cl_entities[cl.num_entities].colormap = vid.colormap;
+			cl_entities[cl.num_entities].lerpflags |= LERP_RESETMOVE | LERP_RESETANIM; //johnfitz
 			cl.num_entities++;
 		}
 	}
@@ -242,6 +248,23 @@ void CL_ParseStartSoundPacket (void)
 
 	S_StartSound (ent, channel, cl.sound_precache[sound_num], pos, volume/255.0, attenuation);
 }       
+
+/*
+==================
+CL_ParseLocalSound - for 2021 rerelease
+==================
+*/
+void CL_ParseLocalSound(void)
+{
+	int field_mask, sound_num;
+
+	field_mask = MSG_ReadByte();
+	sound_num = (field_mask&SND_LARGESOUND) ? MSG_ReadShort() : MSG_ReadByte();
+	if (sound_num >= MAX_SOUNDS)
+		Host_Error("CL_ParseLocalSound: %i > MAX_SOUNDS", sound_num);
+
+	S_LocalSound(cl.sound_precache[sound_num]->name);
+}
 
 /*
 ==================
@@ -542,6 +565,8 @@ void CL_ParseServerInfo (void)
 	COM_StripExtension (COM_SkipPath(model_precache[1]), tempname);
 	R_PreMapLoad (tempname);
 
+	Ghost_Load(tempname);
+
 // now we try to load everything else until a cache allocation fails
 	for (i = 1 ; i < nummodels ; i++)
 	{
@@ -637,6 +662,11 @@ void CL_ParseUpdate (int bits)
 
 	forcelink = (ent->msgtime != cl.mtime[1]) ? true : false;
 
+	//johnfitz -- lerping
+	if (ent->msgtime + 0.2 < cl.mtime[0]) //more than 0.2 seconds since the last message (most entities think every 0.1 sec)
+		ent->lerpflags |= LERP_RESETANIM; //if we missed a think, we'd be lerping from the wrong frame
+	//johnfitz
+
 	ent->msgtime = cl.mtime[0];
 
 	if (bits & U_MODEL)
@@ -704,8 +734,15 @@ void CL_ParseUpdate (int bits)
 #endif
 	}
 
+	//johnfitz -- lerping for movetype_step entities
 	if (bits & U_NOLERP)
+	{
+		ent->lerpflags |= LERP_MOVESTEP;
 		ent->forcelink = true;
+	}
+	else
+		ent->lerpflags &= ~LERP_MOVESTEP;
+	//johnfitz
 
 	//johnfitz -- PROTOCOL_FITZQUAKE
 	if (cl.protocol != PROTOCOL_NETQUAKE)
@@ -723,14 +760,13 @@ void CL_ParseUpdate (int bits)
 			ent->frame = (ent->frame & 0x00FF) | (MSG_ReadByte() << 8);
 		if (bits & U_MODEL2)
 			ent->modelindex = (ent->modelindex & 0x00FF) | (MSG_ReadByte() << 8);
-		if (bits & U_LERPFINISH)	//joe: lerping is not used yet
+		if (bits & U_LERPFINISH)
 		{
-			float lerpfinish = ent->msgtime + ((float)(MSG_ReadByte()) / 255);
-			//ent->lerpfinish = ent->msgtime + ((float)(MSG_ReadByte()) / 255);
-			//ent->lerpflags |= LERP_FINISH;
+			ent->frame_finish_time = ent->msgtime + ((float)(MSG_ReadByte()) / 255);
+			ent->lerpflags |= LERP_FINISH;
 		}
-		//else
-		//	ent->lerpflags &= ~LERP_FINISH;
+		else
+			ent->lerpflags &= ~LERP_FINISH;
 	}
 	//johnfitz
 
@@ -747,6 +783,7 @@ void CL_ParseUpdate (int bits)
 		if (num > 0 && num <= cl.maxclients)
 			R_TranslatePlayerSkin(num - 1);
 #endif
+		ent->lerpflags |= LERP_RESETANIM; //johnfitz -- don't lerp animation across model changes
 	}
 
 	if (forcelink)
@@ -923,6 +960,14 @@ void CL_ParseClientdata ()
 	else
 		cl.viewent.transparency = 1;
 	//johnfitz
+
+	//johnfitz -- lerping
+	//ericw -- this was done before the upper 8 bits of cl.stats[STAT_WEAPON] were filled in, breaking on large maps like zendar.bsp
+	if (cl.viewent.model != cl.model_precache[cl.stats[STAT_WEAPON]])
+	{
+		cl.viewent.lerpflags |= LERP_RESETANIM; //don't lerp animation across model changes
+	}
+	//johnfitz
 }
 
 /*
@@ -982,6 +1027,7 @@ void CL_ParseStatic (int version) //johnfitz -- added a parameter
 
 // copy it to the current state
 	ent->model = cl.model_precache[ent->baseline.modelindex];
+	ent->lerpflags |= LERP_RESETANIM; //johnfitz -- lerping
 	ent->frame = ent->baseline.frame;
 	ent->colormap = vid.colormap;
 	ent->skinnum = ent->baseline.skin;
@@ -1185,6 +1231,8 @@ void PrintFinishTime()
 
 		SV_BroadcastPrintf("\n");
 	}
+
+	Ghost_Finish ();
 }
 
 /*
@@ -1195,7 +1243,7 @@ CL_ParseServerMessage
 void CL_ParseServerMessage (void)
 {
 	int		i, cmd, lastcmd;
-	char	*s;
+	char	*s, *str;
 	extern	float	drawstats_limit;
 	extern	cvar_t	show_stats, show_stats_length;
 
@@ -1272,7 +1320,11 @@ void CL_ParseServerMessage (void)
 			break;
 
 		case svc_centerprint:
-			SCR_CenterPrint (MSG_ReadString());
+			//johnfitz -- log centerprints to console
+			str = MSG_ReadString();
+			SCR_CenterPrint(str);
+			Con_LogCenterPrint(str);
+			//johnfitz
 			break;
 
 		case svc_stufftext:
@@ -1292,14 +1344,9 @@ void CL_ParseServerMessage (void)
 		case svc_setangle:
 			for (i = 0 ; i < 3 ; i++)
 				cl.viewangles[i] = MSG_ReadAngle (cl.protocolflags);
-
 			//joe: intermission cam fix
 			if (cls.demoplayback)
-			{
-				VectorCopy(cl.viewangles, cl.mviewangles[0]);
-				VectorCopy(cl.mviewangles[0], cl.mviewangles[1]);
-				cl.mviewangles[0][0] = cl.mviewangles[1][0] = cl.viewangles[0] = -cl.viewangles[0];
-			}
+				VectorCopy(cl.viewangles, last_setangle);
 			break;
 
 		case svc_setview:
@@ -1431,7 +1478,13 @@ void CL_ParseServerMessage (void)
 			break;
 
 		case svc_intermission:
-			cl.intermission = 1;
+			if (cls.demoplayback)
+			{
+				cl.intermission = CL_DemoIntermissionState(cl.intermission, 1);
+				VectorCopy(last_setangle, cl_entities[cl.viewentity].angles);	//joe: fix view from last setangle
+			}
+			else
+				cl.intermission = 1;
 			cl.completed_time = cl.mtime[0];	//joe: intermission bugfix
 			vid.recalc_refdef = true;	// go to full screen
 			PrintFinishTime();
@@ -1443,9 +1496,19 @@ void CL_ParseServerMessage (void)
 				cl.completed_time = cl.mtime[0];	//joe: intermission bugfix
 				PrintFinishTime();
 			}
-			cl.intermission = 2;
+			if (cls.demoplayback)
+			{
+				cl.intermission = CL_DemoIntermissionState(cl.intermission, 2);
+				VectorCopy(last_setangle, cl_entities[cl.viewentity].angles);	//joe: fix view from last setangle
+			}
+			else
+				cl.intermission = 2;
 			vid.recalc_refdef = true;	// go to full screen
-			SCR_CenterPrint (MSG_ReadString());
+			//johnfitz -- log centerprints to console
+			str = MSG_ReadString();
+			SCR_CenterPrint(str);
+			Con_LogCenterPrint(str);
+			//johnfitz
 			break;
 
 		case svc_cutscene:
@@ -1454,9 +1517,16 @@ void CL_ParseServerMessage (void)
 				cl.completed_time = cl.mtime[0];	//joe: intermission bugfix
 				PrintFinishTime();
 			}
-			cl.intermission = 3;
+			if (cls.demoplayback)
+				cl.intermission = CL_DemoIntermissionState(cl.intermission, 3);
+			else
+				cl.intermission = 3;
 			vid.recalc_refdef = true;	// go to full screen
-			SCR_CenterPrint (MSG_ReadString());
+			//johnfitz -- log centerprints to console
+			str = MSG_ReadString();
+			SCR_CenterPrint(str);
+			Con_LogCenterPrint(str);
+			//johnfitz
 			break;
 
 		case svc_sellscreen:
@@ -1505,6 +1575,10 @@ void CL_ParseServerMessage (void)
 		case svc_achievement:	//used by the 2021 rerelease
 			s = MSG_ReadString();
 			Con_DPrintf("Ignoring svc_achievement (%s)\n", s);
+			break;
+
+		case svc_localsound:
+			CL_ParseLocalSound();
 			break;
 		}
 

@@ -37,6 +37,7 @@ mplane_t frustum[4];
 int		c_brush_polys, c_alias_polys, c_md3_polys;
 
 int		particletexture;	// little dot for particles
+int		particletexture2;	// little square for particles
 int		playertextures;		// up to 16 color translated skins
 int		skyboxtextures;
 int		underwatertexture, detailtexture;
@@ -66,6 +67,8 @@ vec3_t	vpn;
 vec3_t	vright;
 vec3_t	r_origin;
 
+float	r_fovx, r_fovy; //johnfitz -- rendering fov may be different becuase of r_waterwarp
+
 float	r_world_matrix[16];
 float	r_base_world_matrix[16];
 
@@ -76,6 +79,7 @@ mleaf_t	*r_viewleaf, *r_oldviewleaf;
 mleaf_t	*r_viewleaf2, *r_oldviewleaf2;	// for watervis hack
 
 texture_t *r_notexture_mip;
+texture_t *r_notexture_mip2; //johnfitz -- used for non-lightmapped surfs with a missing texture
 
 int		d_lightstylevalue[256];	// 8.8 fraction of base light value
 
@@ -84,11 +88,14 @@ cvar_t	r_drawviewmodel = {"r_drawviewmodel", "1"};
 cvar_t	r_speeds = {"r_speeds", "0"};
 cvar_t	r_fullbright = {"r_fullbright", "0"};
 cvar_t	r_lightmap = {"r_lightmap", "0"};
-cvar_t	r_shadows = {"r_shadows", "2"};		// probably a bit rough...
+cvar_t	r_shadows = {"r_shadows", "0"};
 qboolean OnChange_r_wateralpha(cvar_t *var, char *string);
 cvar_t	r_wateralpha = {"r_wateralpha", "1", 0, OnChange_r_wateralpha };
+cvar_t	r_litwater = { "r_litwater", "1" };
 cvar_t	r_dynamic = {"r_dynamic", "1"};
 cvar_t	r_novis = {"r_novis", "0" };
+cvar_t	r_outline = { "r_outline", "0" };
+cvar_t	r_outline_surf = { "r_outline_surf", "0" };
 cvar_t	r_fullbrightskins = {"r_fullbrightskins", "0"};
 cvar_t	r_fastsky = {"r_fastsky", "0"};
 cvar_t	r_skycolor = {"r_skycolor", "4"};
@@ -115,7 +122,9 @@ cvar_t	gl_nocolors = {"gl_nocolors", "0"};
 cvar_t	gl_finish = {"gl_finish", "0"};
 cvar_t	gl_loadlitfiles = {"gl_loadlitfiles", "1"};
 cvar_t	gl_doubleeyes = {"gl_doubleeyes", "1"};
-cvar_t	gl_interdist = {"gl_interpolate_distance", "135"};
+cvar_t	gl_interdist = {"gl_interpolate_distance", "135" };
+cvar_t	gl_interpolate_anims = {"gl_interpolate_animation", "1"};
+cvar_t	gl_interpolate_moves = {"gl_interpolate_movement", "1"};
 cvar_t  gl_waterfog = {"gl_waterfog", "1"};
 cvar_t  gl_waterfog_density = {"gl_waterfog_density", "0.5"};
 cvar_t	gl_detail = {"gl_detail", "0"};
@@ -128,6 +137,7 @@ cvar_t  gl_vertexlights = {"gl_vertexlights", "1"};
 cvar_t	gl_shownormals = {"gl_shownormals", "0"};
 cvar_t  gl_loadq3models = {"gl_loadq3models", "0"};
 cvar_t  gl_lerptextures = {"gl_lerptextures", "1"};
+cvar_t	gl_zfix = { "gl_zfix", "0" }; // QuakeSpasm z-fighting fix
 
 cvar_t	gl_part_explosions = {"gl_part_explosions", "0"};
 cvar_t	gl_part_trails = {"gl_part_trails", "0"};
@@ -149,6 +159,10 @@ cvar_t	gl_decal_bullets = {"gl_decal_bullets", "0"};
 cvar_t	gl_decal_sparks = {"gl_decal_sparks", "0"};
 cvar_t	gl_decal_explosions = {"gl_decal_explosions", "0"};
 
+extern cvar_t r_waterquality;
+extern cvar_t r_oldwater;
+extern cvar_t r_waterwarp;
+
 int		lightmode = 2;
 
 float	pitch_rot;
@@ -158,6 +172,7 @@ float	q3legs_rot;
 
 void R_MarkSurfaces(void);
 void R_InitBubble (void);
+void R_Clear(void);
 
 //==============================================================================
 //
@@ -339,60 +354,43 @@ R_RotateForEntity
 void R_RotateForEntity (entity_t *ent, qboolean shadow)
 {
 	int		i;
-	float	lerpfrac, timepassed;
+	float	lerpfrac;
 	vec3_t	d, interpolated;
 
-	// positional interpolation
-	timepassed = cl.time - ent->translate_start_time;
-
-	if (ent->translate_start_time == 0 || timepassed > 1)
+	// if LERP_RESETMOVE, kill any lerps in progress
+	if (ent->lerpflags & LERP_RESETMOVE)
 	{
-		ent->translate_start_time = cl.time;
+		ent->translate_start_time = 0;
 		VectorCopy (ent->origin, ent->origin1);
 		VectorCopy (ent->origin, ent->origin2);
+		VectorCopy(ent->angles, ent->angles1);
+		VectorCopy(ent->angles, ent->angles2);
+		ent->lerpflags -= LERP_RESETMOVE;
 	}
-
-	if (!VectorCompare(ent->origin, ent->origin2))
+	else if (!VectorCompare(ent->origin, ent->origin2) || !VectorCompare(ent->angles, ent->angles2)) // origin/angles changed, start new lerp
 	{
 		ent->translate_start_time = cl.time;
 		VectorCopy (ent->origin2, ent->origin1);
 		VectorCopy (ent->origin,  ent->origin2);
-		lerpfrac = 0;
-	}
-	else
-	{
-		lerpfrac = timepassed / 0.1;
-		if (cl.paused || lerpfrac > 1)
-			lerpfrac = 1;
+		VectorCopy(ent->angles2, ent->angles1);
+		VectorCopy(ent->angles, ent->angles2);
 	}
 
+	if (gl_interpolate_moves.value && ent->lerpflags & LERP_MOVESTEP)
+	{
+		if (ent->lerpflags & LERP_FINISH)
+			lerpfrac = bound(0, (cl.time - ent->translate_start_time) / (ent->frame_finish_time - ent->translate_start_time), 1);
+		else
+			lerpfrac = bound(0, (cl.time - ent->translate_start_time) / 0.1, 1);
+	}
+	else
+		lerpfrac = 1;
+
+	//translation
 	VectorInterpolate (ent->origin1, lerpfrac, ent->origin2, interpolated);
 	glTranslatef (interpolated[0], interpolated[1], interpolated[2]);
 
-	// orientation interpolation (Euler angles, yuck!)
-	timepassed = cl.time - ent->rotate_start_time; 
-
-	if (ent->rotate_start_time == 0 || timepassed > 1)
-	{
-		ent->rotate_start_time = cl.time;
-		VectorCopy (ent->angles, ent->angles1);
-		VectorCopy (ent->angles, ent->angles2);
-	}
-
-	if (!VectorCompare(ent->angles, ent->angles2))
-	{
-		ent->rotate_start_time = cl.time;
-		VectorCopy (ent->angles2, ent->angles1);
-		VectorCopy (ent->angles,  ent->angles2);
-		lerpfrac = 0;
-	}
-	else
-	{
-		lerpfrac = timepassed / 0.1;
-		if (cl.paused || lerpfrac > 1)
-			lerpfrac = 1;
-	}
-
+	//rotation
 	VectorSubtract (ent->angles2, ent->angles1, d);
 
 	// always interpolate along the shortest path
@@ -891,7 +889,7 @@ Based on code by MH from RMQEngine
 */
 void R_DrawAliasFrame_GLSL(int frame, aliashdr_t *paliashdr, entity_t *ent, int distance, int gl_texture, int fb_texture, qboolean islumaskin)
 {
-	int			pose, numposes;
+	int			posenum, numposes;
 
 	if ((frame >= paliashdr->numframes) || (frame < 0))
 	{
@@ -899,34 +897,57 @@ void R_DrawAliasFrame_GLSL(int frame, aliashdr_t *paliashdr, entity_t *ent, int 
 		frame = 0;
 	}
 
-	pose = paliashdr->frames[frame].firstpose;
+	posenum = paliashdr->frames[frame].firstpose;
 	numposes = paliashdr->frames[frame].numposes;
 
 	if (numposes > 1)
 	{
 		ent->frame_interval = paliashdr->frames[frame].interval;
-		pose += (int)(cl.time / ent->frame_interval) % numposes;
+		posenum += (int)(cl.time / ent->frame_interval) % numposes;
 	}
 	else
 	{
 		ent->frame_interval = 0.1;
 	}
 
-	if (ent->pose2 != pose)
+	if (ent->lerpflags & LERP_RESETANIM) //kill any lerp in progress
 	{
-		ent->frame_start_time = cl.time;
-		ent->pose1 = ent->pose2;
-		ent->pose2 = pose;
-		ent->framelerp = 0;
+		ent->frame_start_time = 0;
+		ent->pose1 = posenum;
+		ent->pose2 = posenum;
+		ent->lerpflags -= LERP_RESETANIM;
+	}
+	else if (ent->pose2 != posenum) // pose changed, start new lerp
+	{
+		if (ent->lerpflags & LERP_RESETANIM2) //defer lerping one more time
+		{
+			ent->frame_start_time = 0;
+			ent->pose1 = posenum;
+			ent->pose2 = posenum;
+			ent->lerpflags -= LERP_RESETANIM2;
+		}
+		else
+		{
+			ent->frame_start_time = cl.time;
+			ent->pose1 = ent->pose2;
+			ent->pose2 = posenum;
+		}
+	}
+
+	//set up values
+	if (gl_interpolate_anims.value)
+	{
+		if (ent->lerpflags & LERP_FINISH && numposes == 1)
+			ent->framelerp = bound(0, (cl.time - ent->frame_start_time) / (ent->frame_finish_time - ent->frame_start_time), 1);
+		else
+			ent->framelerp = bound(0, (cl.time - ent->frame_start_time) / ent->frame_interval, 1);
 	}
 	else
 	{
-		ent->framelerp = (cl.time - ent->frame_start_time) / ent->frame_interval;
-	}
-
-	// weird things start happening if blend passes 1
-	if (cl.paused || ent->framelerp > 1)
 		ent->framelerp = 1;
+		ent->pose1 = posenum;
+		ent->pose2 = posenum;
+	}
 
 	if (ISTRANSPARENT(ent))
 		glEnable(GL_BLEND);
@@ -1003,6 +1024,111 @@ void R_DrawAliasFrame_GLSL(int frame, aliashdr_t *paliashdr, entity_t *ent, int 
 		glDisable(GL_BLEND);
 }
 
+void GL_PolygonOffset(int offset)
+{
+	if (offset > 0)
+	{
+		glEnable(GL_POLYGON_OFFSET_FILL);
+		glEnable(GL_POLYGON_OFFSET_LINE);
+		glPolygonOffset(1, offset);
+	}
+	else if (offset < 0)
+	{
+		glEnable(GL_POLYGON_OFFSET_FILL);
+		glEnable(GL_POLYGON_OFFSET_LINE);
+		glPolygonOffset(-1, offset);
+	}
+	else
+	{
+		glDisable(GL_POLYGON_OFFSET_FILL);
+		glDisable(GL_POLYGON_OFFSET_LINE);
+	}
+}
+
+/*
+=============
+R_DrawAliasOutlineFrame
+=============
+*/
+void R_DrawAliasOutlineFrame(int frame, aliashdr_t *paliashdr, entity_t *ent, int distance)
+{
+	int			*order, count, pose, numposes;
+	vec3_t		interpolated_verts;
+	float		lerpfrac;
+	trivertx_t	*verts1, *verts2;
+	qboolean	lerpmdl = true;
+	float		line_width = bound(1, r_outline.value, 3);
+
+	if (ent->transparency < 1.0f)
+		return;
+
+	if (ent->model->modhint == MOD_EYES)//No outlines on eyes please!
+		return;
+
+	if (ent->model->modhint == MOD_FLAME)
+		return;
+
+
+	glCullFace(GL_BACK);
+	glPolygonMode(GL_FRONT, GL_LINE);
+
+	glLineWidth(line_width);
+
+	glEnable(GL_LINE_SMOOTH);
+	GL_PolygonOffset(-0.7);
+	glDisable(GL_TEXTURE_2D);
+
+	if ((frame >= paliashdr->numframes) || (frame < 0))
+	{
+		Con_DPrintf("R_DrawAliasFrame: no such frame %d\n", frame);
+		frame = 0;
+	}
+
+	pose = paliashdr->frames[frame].firstpose;
+	numposes = paliashdr->frames[frame].numposes;
+
+	verts1 = (trivertx_t *)((byte *)paliashdr + paliashdr->posedata);
+	verts2 = verts1;
+
+	verts1 += ent->pose1 * paliashdr->poseverts;
+	verts2 += ent->pose2 * paliashdr->poseverts;
+
+	order = (int *)((byte *)paliashdr + paliashdr->commands);
+
+	while ((count = *order++))
+	{
+		// get the vertex count and primitive type
+		if (count < 0)
+		{
+			count = -count;
+
+			glBegin(GL_TRIANGLE_FAN);
+		}
+		else
+		{
+			glBegin(GL_TRIANGLE_STRIP);
+		}
+		do
+		{
+			lerpfrac = VectorL2Compare(verts1->v, verts2->v, distance) ? ent->framelerp : 1;
+			VectorInterpolate(verts1->v, lerpfrac, verts2->v, interpolated_verts);
+			glVertex3fv(interpolated_verts);
+
+			order += 2;
+			verts1++;
+			verts2++;
+		} while (--count);
+
+		glEnd();
+	}
+	glColor4f(1, 1, 1, 1);
+	GL_PolygonOffset(0);
+	glPolygonMode(GL_FRONT, GL_FILL);
+	glDisable(GL_LINE_SMOOTH);
+	glCullFace(GL_FRONT);
+	glEnable(GL_TEXTURE_2D);
+}
+
 /*
 =============
 R_DrawAliasFrame
@@ -1010,7 +1136,7 @@ R_DrawAliasFrame
 */
 void R_DrawAliasFrame (int frame, aliashdr_t *paliashdr, entity_t *ent, int distance)
 {
-	int			i, *order, count, pose, numposes;
+	int			i, *order, count, posenum, numposes;
 	float		l, lerpfrac;
 	vec3_t		lightvec, interpolated_verts;
 	trivertx_t	*verts1, *verts2;
@@ -1021,34 +1147,57 @@ void R_DrawAliasFrame (int frame, aliashdr_t *paliashdr, entity_t *ent, int dist
 		frame = 0;
 	}
 
-	pose = paliashdr->frames[frame].firstpose;
+	posenum = paliashdr->frames[frame].firstpose;
 	numposes = paliashdr->frames[frame].numposes;
 
 	if (numposes > 1)
 	{
 		ent->frame_interval = paliashdr->frames[frame].interval;
-		pose += (int)(cl.time / ent->frame_interval) % numposes;
+		posenum += (int)(cl.time / ent->frame_interval) % numposes;
 	}
 	else
 	{
 		ent->frame_interval = 0.1;
 	}
 
-	if (ent->pose2 != pose)
+	if (ent->lerpflags & LERP_RESETANIM) //kill any lerp in progress
 	{
-		ent->frame_start_time = cl.time;
-		ent->pose1 = ent->pose2;
-		ent->pose2 = pose;
-		ent->framelerp = 0;
+		ent->frame_start_time = 0;
+		ent->pose1 = posenum;
+		ent->pose2 = posenum;
+		ent->lerpflags -= LERP_RESETANIM;
+	}
+	else if (ent->pose2 != posenum) // pose changed, start new lerp
+	{
+		if (ent->lerpflags & LERP_RESETANIM2) //defer lerping one more time
+		{
+			ent->frame_start_time = 0;
+			ent->pose1 = posenum;
+			ent->pose2 = posenum;
+			ent->lerpflags -= LERP_RESETANIM2;
+		}
+		else
+		{
+			ent->frame_start_time = cl.time;
+			ent->pose1 = ent->pose2;
+			ent->pose2 = posenum;
+		}
+	}
+
+	//set up values
+	if (gl_interpolate_anims.value)
+	{
+		if (ent->lerpflags & LERP_FINISH && numposes == 1)
+			ent->framelerp = bound(0, (cl.time - ent->frame_start_time) / (ent->frame_finish_time - ent->frame_start_time), 1);
+		else
+			ent->framelerp = bound(0, (cl.time - ent->frame_start_time) / ent->frame_interval, 1);
 	}
 	else
 	{
-		ent->framelerp = (cl.time - ent->frame_start_time) / ent->frame_interval;
-	}
-
-	// weird things start happening if blend passes 1
-	if (cl.paused || ent->framelerp > 1)
 		ent->framelerp = 1;
+		ent->pose1 = posenum;
+		ent->pose2 = posenum;
+	}
 
 	verts1 = (trivertx_t *)((byte *)paliashdr + paliashdr->posedata);
 	verts2 = verts1;
@@ -1210,9 +1359,10 @@ R_SetupLighting
 void R_SetupLighting (entity_t *ent)
 {
 	int		i, lnum;
-	float	add;
-	vec3_t	dist, dlight_color, lpos;
+	float	add, theta;
+	vec3_t	dist, dlight_color;
 	model_t	*clmodel = ent->model;
+	static float shadescale = 0;
 
 	// make thunderbolt and torches full light
 	if (clmodel->modhint == MOD_THUNDERBOLT)
@@ -1238,13 +1388,19 @@ void R_SetupLighting (entity_t *ent)
 	}
 
 	// normal lighting
-	VectorCopy(ent->origin, lpos);
-	// start the light trace from slightly above the origin
-	// this helps with models whose origin is below ground level, but are otherwise visible
-	// (e.g. some of the candles in the DOTM start map, which would otherwise appear black)
-	lpos[2] += ent->model->maxs[2] * 0.5f;
-	ambientlight = shadelight = R_LightPoint(lpos);
- 	full_light = false;
+	// if the initial trace is completely black, try again from above
+	// this helps with models whose origin is slightly below ground level
+	// (e.g. some of the candles in the DOTM start map)
+	ambientlight = shadelight = R_LightPoint(ent->origin);
+	if (!ambientlight)
+	{
+		vec3_t lpos;
+		VectorCopy(ent->origin, lpos);
+		lpos[2] += ent->model->maxs[2] * 0.5f;
+		ambientlight = shadelight = R_LightPoint(lpos);
+	}
+
+	full_light = false;
 	ent->noshadow = (clmodel->flags & EF_NOSHADOW);
 
 	for (lnum = 0 ; lnum < MAX_DLIGHTS ; lnum++)
@@ -1260,6 +1416,7 @@ void R_SetupLighting (entity_t *ent)
 		// joe: only allow colorlight affection if dynamic lights are on
 			if (r_dynamic.value)
 			{
+				shadelight += add;
 				VectorCopy (bubblecolor[cl_dlights[lnum].type], dlight_color);
 				for (i = 0 ; i < 3 ; i++)
 				{
@@ -1286,10 +1443,7 @@ void R_SetupLighting (entity_t *ent)
 					}
 				}
 			}
-			else
-			{
-				ambientlight += add;
-			}
+			ambientlight += add;
 		}
 	}
 
@@ -1312,6 +1466,12 @@ void R_SetupLighting (entity_t *ent)
 		if (ambientlight < 24)
 			ambientlight = shadelight = 24;
 	}
+
+	if (!shadescale)
+		shadescale = 1 / sqrt(2);
+	theta = -ent->angles[1] / 180 * M_PI;
+
+	VectorSet(shadevector, cos(theta) * shadescale, sin(theta) * shadescale, shadescale);
 
 	// never allow players to go totally black
 	if (Mod_IsAnyKindOfPlayerModel(clmodel))
@@ -1494,7 +1654,10 @@ void R_DrawAliasModel (entity_t *ent)
 	// seperately for the players. Heads are just uncolored.
 	if (ent->colormap != vid.colormap && !gl_nocolors.value)
 	{
-		i = ent - cl_entities;
+		extern entity_t	*ghost_entity;
+
+		// imitate the same colors for the ghost model as the player
+		i = (ent == ghost_entity) ? 1 : ent - cl_entities;
 
 		if (i > 0 && i <= cl.maxclients)
 		{
@@ -1613,6 +1776,13 @@ void R_DrawAliasModel (entity_t *ent)
 		}
 	}
 	
+	if (r_outline.value)
+	{
+		glColor4f(0, 0, 0, 1);
+		R_DrawAliasOutlineFrame(ent->frame, paliashdr, ent, distance);
+		glColor4f(1, 1, 1, 1);
+	}
+
 	if (alphatest)
 		glDisable(GL_ALPHA_TEST);
 
@@ -1625,18 +1795,10 @@ void R_DrawAliasModel (entity_t *ent)
 	if (r_shadows.value && !ent->noshadow)
 	{
 		int		farclip;
-		float	theta;
 		vec3_t	downmove;
 		trace_t	downtrace;
-		static float shadescale = 0;
 
 		farclip = max((int)r_farclip.value, 4096);
-
-		if (!shadescale)
-			shadescale = 1 / sqrt(2);
-		theta = -ent->angles[1] / 180 * M_PI;
-
-		VectorSet (shadevector, cos(theta) * shadescale, sin(theta) * shadescale, shadescale);
 
 		glPushMatrix ();
 
@@ -1975,7 +2137,7 @@ R_DrawQ3Frame
 */
 void R_DrawQ3Frame (int frame, md3header_t *pmd3hdr, md3surface_t *pmd3surf, entity_t *ent, int distance)
 {
-	int			i, j, numtris, pose, pose1, pose2;
+	int			i, j, numtris, posenum, numposes, pose1, pose2;
 	float		l, lerpfrac;
 	vec3_t		lightvec, interpolated_verts;
 	unsigned int *tris;
@@ -1992,7 +2154,8 @@ void R_DrawQ3Frame (int frame, md3header_t *pmd3hdr, md3surface_t *pmd3surf, ent
 	if (ent->pose1 >= pmd3hdr->numframes)
 		ent->pose1 = 0;
 
-	pose = frame;
+	posenum = frame;
+	numposes = pmd3hdr->numframes;
 
 	if (!strcmp(clmodel->name, cl_modelnames[mi_q3legs]))
 		ent->frame_interval = anims[legsanim].interval;
@@ -2001,21 +2164,44 @@ void R_DrawQ3Frame (int frame, md3header_t *pmd3hdr, md3surface_t *pmd3surf, ent
 	else
 		ent->frame_interval = 0.1;
 
-	if (ent->pose2 != pose)
+	if (ent->lerpflags & LERP_RESETANIM) //kill any lerp in progress
 	{
-		ent->frame_start_time = cl.time;
-		ent->pose1 = ent->pose2;
-		ent->pose2 = pose;
-		ent->framelerp = 0;
+		ent->frame_start_time = 0;
+		ent->pose1 = posenum;
+		ent->pose2 = posenum;
+		ent->lerpflags -= LERP_RESETANIM;
+	}
+	else if (ent->pose2 != posenum) // pose changed, start new lerp
+	{
+		if (ent->lerpflags & LERP_RESETANIM2) //defer lerping one more time
+		{
+			ent->frame_start_time = 0;
+			ent->pose1 = posenum;
+			ent->pose2 = posenum;
+			ent->lerpflags -= LERP_RESETANIM2;
+		}
+		else
+		{
+			ent->frame_start_time = cl.time;
+			ent->pose1 = ent->pose2;
+			ent->pose2 = posenum;
+		}
+	}
+
+	//set up values
+	if (gl_interpolate_anims.value)
+	{
+		if (ent->lerpflags & LERP_FINISH && numposes == 1)
+			ent->framelerp = bound(0, (cl.time - ent->frame_start_time) / (ent->frame_finish_time - ent->frame_start_time), 1);
+		else
+			ent->framelerp = bound(0, (cl.time - ent->frame_start_time) / ent->frame_interval, 1);
 	}
 	else
 	{
-		ent->framelerp = (cl.time - ent->frame_start_time) / ent->frame_interval;
-	}
-
-	// weird things start happening if blend passes 1
-	if (cl.paused || ent->framelerp > 1)
 		ent->framelerp = 1;
+		ent->pose1 = posenum;
+		ent->pose2 = posenum;
+	}
 
 	verts = (md3vert_mem_t *)((byte *)pmd3hdr + pmd3surf->ofsverts);
 	tc = (md3tc_t *)((byte *)pmd3surf + pmd3surf->ofstc);
@@ -2427,7 +2613,8 @@ void R_SetupQ3Frame (entity_t *ent)
 #endif
 		}
 
-		R_SetupQ3Frame (newent);
+		if (newent->model)
+			R_SetupQ3Frame (newent);
 
 		glPopMatrix ();
 	}
@@ -2530,18 +2717,11 @@ void R_DrawQ3Model (entity_t *ent)
 	if (r_shadows.value && !ent->noshadow)
 	{
 		int			farclip;
-		float		theta, lheight, s1, c1;
+		float		lheight, s1, c1;
 		vec3_t		downmove;
 		trace_t		downtrace;
-		static float shadescale = 0;
 
 		farclip = max((int)r_farclip.value, 4096);
-
-		if (!shadescale)
-			shadescale = 1 / sqrt(2);
-		theta = -ent->angles[1] / 180 * M_PI;
-
-		VectorSet (shadevector, cos(theta) * shadescale, sin(theta) * shadescale, shadescale);
 
 		glPushMatrix ();
 
@@ -2980,18 +3160,18 @@ int SignbitsForPlane (mplane_t *out)
 	return bits;
 }
 
-void R_SetFrustum (void)
+void R_SetFrustum (float fovx, float fovy)
 {
 	int	i;
 
 	// rotate VPN right by FOV_X/2 degrees
-	RotatePointAroundVector (frustum[0].normal, vup, vpn, -(90 - r_refdef.fov_x / 2));
+	RotatePointAroundVector (frustum[0].normal, vup, vpn, -(90 - fovx / 2));
 	// rotate VPN left by FOV_X/2 degrees
-	RotatePointAroundVector (frustum[1].normal, vup, vpn, 90 - r_refdef.fov_x / 2);
+	RotatePointAroundVector (frustum[1].normal, vup, vpn, 90 - fovx / 2);
 	// rotate VPN up by FOV_X/2 degrees
-	RotatePointAroundVector (frustum[2].normal, vright, vpn, 90 - r_refdef.fov_y / 2);
+	RotatePointAroundVector (frustum[2].normal, vright, vpn, 90 - fovy / 2);
 	// rotate VPN down by FOV_X/2 degrees
-	RotatePointAroundVector (frustum[3].normal, vright, vpn, -(90 - r_refdef.fov_y / 2));
+	RotatePointAroundVector (frustum[3].normal, vright, vpn, -(90 - fovy / 2));
 
 	for (i = 0 ; i < 4 ; i++)
 	{
@@ -3064,6 +3244,29 @@ void R_SetupFrame (void)
 	V_CalcBlend ();
 
 	r_cache_thrash = false;
+
+	//johnfitz -- calculate r_fovx and r_fovy here
+	r_fovx = r_refdef.fov_x;
+	r_fovy = r_refdef.fov_y;
+	if (r_waterwarp.value)
+	{
+		int contents = Mod_PointInLeaf(r_origin, cl.worldmodel)->contents;
+		if (contents == CONTENTS_WATER || contents == CONTENTS_SLIME || contents == CONTENTS_LAVA)
+		{
+			//variance is a percentage of width, where width = 2 * tan(fov / 2) otherwise the effect is too dramatic at high FOV and too subtle at low FOV.  what a mess!
+			r_fovx = atan(tan(DEG2RAD(r_refdef.fov_x) / 2) * (0.97 + sin(cl.time * 1.5) * 0.03)) * 2 / M_PI_DIV_180;
+			r_fovy = atan(tan(DEG2RAD(r_refdef.fov_y) / 2) * (1.03 - sin(cl.time * 1.5) * 0.03)) * 2 / M_PI_DIV_180;
+		}
+	}
+	//johnfitz
+
+	R_SetFrustum(r_fovx, r_fovy); //johnfitz -- use r_fov* vars
+
+	R_MarkSurfaces(); //johnfitz -- create texture chains from PVS
+
+	R_UpdateWarpTextures(); //johnfitz -- do this before R_Clear
+
+	R_Clear();
 }
 
 void MYgluPerspective (GLdouble fovy, GLdouble aspect, GLdouble zNear, GLdouble zFar)
@@ -3081,13 +3284,27 @@ void MYgluPerspective (GLdouble fovy, GLdouble aspect, GLdouble zNear, GLdouble 
 
 /*
 =============
+GL_SetFrustum -- johnfitz -- written to replace MYgluPerspective
+=============
+*/
+#define NEARCLIP 4
+void GL_SetFrustum(float fovx, float fovy)
+{
+	float xmax, ymax;
+	xmax = NEARCLIP * tan(fovx * M_PI / 360.0);
+	ymax = NEARCLIP * tan(fovy * M_PI / 360.0);
+	glFrustum(-xmax, xmax, -ymax, ymax, NEARCLIP, r_farclip.value);
+}
+
+/*
+=============
 R_SetupGL
 =============
 */
 void R_SetupGL (void)
 {
-	float	screenaspect, scale;
-	int		x, x2, y2, y, w, h, farclip;
+	float	scale;
+	int		x, x2, y2, y, w, h;
 
 	// set up viewpoint
 	glMatrixMode (GL_PROJECTION);
@@ -3103,9 +3320,7 @@ void R_SetupGL (void)
 
 	glViewport (glx + x, gly + y2, w * scale, h * scale);
 
-	screenaspect = (float)r_refdef.vrect.width/r_refdef.vrect.height;
-	farclip = max((int)r_farclip.value, 4096);
-	MYgluPerspective (r_refdef.fov_y, screenaspect, 4, farclip);
+	GL_SetFrustum(r_fovx, r_fovy); //johnfitz -- use r_fov* vars
 
 	glCullFace (GL_FRONT);
 
@@ -3154,9 +3369,12 @@ void R_Init (void)
 	Cvar_Register (&r_drawviewmodel);
 	Cvar_Register (&r_shadows);
 	Cvar_Register (&r_wateralpha);
+	Cvar_Register (&r_litwater);
 	Cvar_Register (&r_dynamic);
 	Cvar_Register (&r_novis);
 	Cvar_Register (&r_speeds);
+	Cvar_Register (&r_outline);
+	Cvar_Register (&r_outline_surf);
 	Cvar_Register (&r_fullbrightskins);
 	Cvar_Register (&r_fastsky);
 	Cvar_Register (&r_skycolor);
@@ -3166,6 +3384,9 @@ void R_Init (void)
 	Cvar_Register (&r_farclip);
 	Cvar_Register (&r_skyfog);
 	Cvar_Register (&r_scale);
+	Cvar_Register(&r_waterquality);
+	Cvar_Register(&r_oldwater);
+	Cvar_Register(&r_waterwarp);
 
 	Cvar_Register (&gl_finish);
 	Cvar_Register (&gl_clear);
@@ -3180,6 +3401,8 @@ void R_Init (void)
 	Cvar_Register (&gl_loadlitfiles);
 	Cvar_Register (&gl_doubleeyes);
 	Cvar_Register (&gl_interdist);
+	Cvar_Register (&gl_interpolate_anims);
+	Cvar_Register (&gl_interpolate_moves);
 	Cvar_Register (&gl_waterfog);
 	Cvar_Register (&gl_waterfog_density);
 	Cvar_Register (&gl_detail);
@@ -3192,6 +3415,7 @@ void R_Init (void)
 	Cvar_Register (&gl_shownormals);
 	Cvar_Register (&gl_loadq3models);
 	Cvar_Register (&gl_lerptextures);
+	Cvar_Register (&gl_zfix);
 
 	Cvar_Register (&gl_part_explosions);
 	Cvar_Register (&gl_part_trails);
@@ -3246,13 +3470,7 @@ r_refdef must be set before the first call
 */
 void R_RenderScene (void)
 {
-	R_SetupFrame ();
-
-	R_SetFrustum ();
-
-	R_SetupGL ();
-
-	R_MarkSurfaces(); //johnfitz -- create texture chains from PVS
+	R_SetupGL();
 
 	Fog_EnableGFog();	//johnfitz 
 
@@ -3270,7 +3488,17 @@ void R_RenderScene (void)
 	// then draw the transparent ones
 	R_DrawTransEntitiesOnList ();
 
+	Ghost_Draw();
+
 	GL_DisableMultitexture ();
+
+	R_RenderDlights();
+
+	R_DrawParticles();
+
+	Fog_DisableGFog(); //johnfitz
+
+	R_DrawViewModel();
 }
 
 int	gl_ztrickframe = 0;
@@ -3436,15 +3664,10 @@ void R_RenderView (void)
 	if (gl_finish.value)
 		glFinish ();
 
-	R_Clear ();
+	R_SetupFrame();
 
 	// render normal view
-
 	R_RenderScene ();
-	R_RenderDlights ();
-	R_DrawParticles ();
-	Fog_DisableGFog(); //johnfitz
-	R_DrawViewModel ();
 
 	R_ScaleView();
 

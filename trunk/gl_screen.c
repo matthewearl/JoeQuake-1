@@ -94,6 +94,7 @@ cvar_t		gl_triplebuffer = {"gl_triplebuffer", "1", CVAR_ARCHIVE};
 cvar_t		scr_sshot_format = {"scr_sshot_format", "jpg"};
 cvar_t		scr_autoid = { "scr_autoid", "0" };
 cvar_t		scr_widescreen_fov = {"scr_widescreen_fov", "1", CVAR_ARCHIVE};
+cvar_t		scr_usekfont = { "scr_usekfont", "0" }; // 2021 re-release
 
 cvar_t		scr_cursor_scale = { "scr_cursor_scale", "1" };				// The mouse cursor scale
 #ifdef GLQUAKE
@@ -445,6 +446,7 @@ void SCR_Init (void)
 	Cvar_Register (&scr_sshot_format);
 	Cvar_Register (&scr_autoid);
 	Cvar_Register (&scr_widescreen_fov);
+	Cvar_Register (&scr_usekfont); // 2021 re-release
 
 	Cvar_Register(&scr_cursor_scale);
 #ifdef GLQUAKE
@@ -1119,6 +1121,8 @@ void SCR_UpdateScreen (void)
 
 		if (con_notify_intermission.value)
 			SCR_DrawConsole();
+
+		Ghost_DrawGhostTime (true);
 	}
 	else if (cl.intermission == 2 && key_dest == key_game)
 	{
@@ -1143,6 +1147,7 @@ void SCR_UpdateScreen (void)
 		SCR_DrawClock ();
 		SCR_DrawFPS ();
 		SCR_DrawSpeed ();
+		Ghost_DrawGhostTime (false);
 		SCR_DrawStats ();
 		SCR_DrawVolume ();
 		SCR_DrawPlaybackStats ();

@@ -44,6 +44,7 @@ model_t	mod_known[MAX_MOD_KNOWN];
 int	mod_numknown;
 
 cvar_t	gl_subdivide_size = {"gl_subdivide_size", "128", CVAR_ARCHIVE};
+cvar_t	external_ents = { "external_ents", "1", CVAR_ARCHIVE };
 
 qboolean OnChange_gl_picmip (cvar_t *var, char *string)
 {
@@ -91,6 +92,7 @@ Mod_Init
 void Mod_Init (void)
 {
 	Cvar_Register (&gl_subdivide_size);
+	Cvar_Register (&external_ents);
 }
 
 /*
@@ -467,29 +469,36 @@ Mod_LoadTextures
 */
 void Mod_LoadTextures (lump_t *l)
 {
-	int			i, j, pixels, num, max, altmax, texture_flag, brighten_flag;
+	int			i, j, pixels, num, max, altmax, texture_flag, brighten_flag, nummiptex;
 	miptex_t	*mt;
 	texture_t	*tx, *tx2, *anims[10], *altanims[10];
 	dmiptexlump_t *m;
 	byte		*data;
 	char		bspname[64];
 
+	//johnfitz -- don't return early if no textures; still need to create dummy texture
 	if (!l->filelen)
 	{
-		loadmodel->textures = NULL;
-		return;
+		Con_Printf("Mod_LoadTextures: no textures in bsp file\n");
+		nummiptex = 0;
+		m = NULL; // avoid bogus compiler warning
 	}
+	else
+	{
+		m = (dmiptexlump_t *)(mod_base + l->fileofs);
+		m->nummiptex = LittleLong(m->nummiptex);
+		nummiptex = m->nummiptex;
+	}
+	//johnfitz
 
-	m = (dmiptexlump_t *)(mod_base + l->fileofs);
-	m->nummiptex = LittleLong (m->nummiptex);
-	
-	loadmodel->numtextures = m->nummiptex;
+	loadmodel->numtextures = nummiptex + 2; //johnfitz -- need 2 dummy texture chains for missing textures
 	loadmodel->textures = Hunk_AllocName (loadmodel->numtextures * sizeof(*loadmodel->textures), loadname);
+	COM_FileBase(loadmodel->name, bspname, sizeof(bspname));
 
 	brighten_flag = (lightmode == 2) ? TEX_BRIGHTEN : 0;
 	texture_flag = TEX_MIPMAP;
 
-	for (i = 0 ; i < m->nummiptex ; i++)
+	for (i = 0 ; i < nummiptex ; i++)
 	{
 		m->dataofs[i] = LittleLong (m->dataofs[i]);
 		if (m->dataofs[i] == -1)
@@ -545,6 +554,10 @@ void Mod_LoadTextures (lump_t *l)
 			Con_DPrintf("Texture %s extends past end of lump\n", mt->name);
 			pixels = max(0, (mod_base + l->fileofs + l->filelen) - (byte*)(mt + 1));
 		}
+
+		tx->update_warp = false; //johnfitz
+		tx->warp_texturenum = 0;
+
 		memcpy(tx + 1, mt + 1, pixels);
 
 		if (loadmodel->isworldmodel && ISSKYTEX(tx->name))
@@ -552,9 +565,6 @@ void Mod_LoadTextures (lump_t *l)
 			R_InitSky (tx);
 			continue;
 		}
-
-		if (Mod_LoadBrushModelTexture(tx, texture_flag))
-			continue;
 
 		if (mt->offsets[0])
 		{
@@ -567,15 +577,28 @@ void Mod_LoadTextures (lump_t *l)
 			tx2 = r_notexture_mip;
 		}
 
-		COM_FileBase(loadmodel->name, bspname, sizeof(bspname));
+		if (!Mod_LoadBrushModelTexture(tx, texture_flag))
+		{
+			tx->gl_texturenum = GL_LoadTexture(va("%s:%s", bspname, tx2->name), tx2->width, tx2->height, data, texture_flag | brighten_flag, 1);
+			if (!ISTURBTEX(tx->name) && Img_HasFullbrights(data, tx2->width * tx2->height))
+				tx->fb_texturenum = GL_LoadTexture(va("%s:@fb_%s", bspname, tx2->name), tx2->width, tx2->height, data, texture_flag | TEX_FULLBRIGHT, 1);
+		}
 
-		tx->gl_texturenum = GL_LoadTexture (va("%s:%s", bspname, tx2->name), tx2->width, tx2->height, data, texture_flag | brighten_flag, 1);
-		if (!ISTURBTEX(tx->name) && Img_HasFullbrights(data, tx2->width * tx2->height))
-			tx->fb_texturenum = GL_LoadTexture (va("%s:@fb_%s", bspname, tx2->name), tx2->width, tx2->height, data, texture_flag | TEX_FULLBRIGHT, 1);
+		if (ISTURBTEX(tx->name))
+		{
+			static byte	dummy[512*512];
+			//now create the warpimage, using dummy data from the hunk to create the initial image
+			tx->warp_texturenum = GL_LoadTexture(va("%s:@warp_%s", bspname, tx2->name), gl_warpimagesize, gl_warpimagesize, dummy, texture_flag, 1);
+			tx->update_warp = true;
+		}
 	}
 
+	//johnfitz -- last 2 slots in array should be filled with dummy textures
+	loadmodel->textures[loadmodel->numtextures-2] = r_notexture_mip; //for lightmapped surfs
+	loadmodel->textures[loadmodel->numtextures-1] = r_notexture_mip2; //for SURF_DRAWTILED surfs
+
 // sequence the animations
-	for (i = 0 ; i < m->nummiptex ; i++)
+	for (i = 0 ; i < nummiptex; i++)
 	{
 		tx = loadmodel->textures[i];
 		if (!tx || tx->name[0] != '+')
@@ -610,7 +633,7 @@ void Mod_LoadTextures (lump_t *l)
 			Sys_Error ("Bad animating texture %s", tx->name);
 		}
 
-		for (j = i + 1 ; j < m->nummiptex ; j++)
+		for (j = i + 1 ; j < nummiptex ; j++)
 		{
 			tx2 = loadmodel->textures[j];
 			if (!tx2 || tx2->name[0] != '+')
@@ -792,6 +815,41 @@ Mod_LoadEntities
 */
 void Mod_LoadEntities (lump_t *l)
 {
+	char	basemapname[MAX_QPATH], entfilename[MAX_QPATH], *ents;
+	int		mark;
+	unsigned int crc = 0;
+
+	if (!external_ents.value)
+		goto _load_embedded;
+
+	mark = Hunk_LowMark();
+	if (l->filelen > 0) 
+	{
+		crc = CRC_Block(mod_base + l->fileofs, l->filelen - 1);
+	}
+
+	Q_strlcpy(basemapname, loadmodel->name, sizeof(basemapname));
+	COM_StripExtension(basemapname, basemapname);
+
+	Q_snprintfz(entfilename, sizeof(entfilename), "%s@%04x.ent", basemapname, crc);
+	Con_DPrintf("trying to load %s\n", entfilename);
+	ents = (char*)COM_LoadHunkFile(entfilename);
+
+	if (!ents)
+	{
+		Q_snprintfz(entfilename, sizeof(entfilename), "%s.ent", basemapname);
+		Con_DPrintf("trying to load %s\n", entfilename);
+		ents = (char*)COM_LoadHunkFile(entfilename);
+	}
+
+	if (ents)
+	{
+		loadmodel->entities = ents;
+		Con_DPrintf("Loaded external entity file %s\n", entfilename);
+		return;
+	}
+
+_load_embedded:
 	if (!l->filelen)
 	{
 		loadmodel->entities = NULL;
@@ -935,7 +993,7 @@ void Mod_LoadTexinfo (lump_t *l)
 {
 	texinfo_t	*in;
 	mtexinfo_t	*out;
-	int 		i, j, count, miptex;
+	int 		i, j, count, miptex, missing = 0; //johnfitz
 
 	in = (void *)(mod_base + l->fileofs);
 	if (l->filelen % sizeof(*in))
@@ -954,24 +1012,28 @@ void Mod_LoadTexinfo (lump_t *l)
 
 		miptex = LittleLong (in->miptex);
 		out->flags = LittleLong (in->flags);
-	
-		if (!loadmodel->textures)
+
+		//johnfitz -- rewrote this section
+		if (miptex >= loadmodel->numtextures-1 || !loadmodel->textures[miptex])
 		{
-			out->texture = r_notexture_mip;	// checkerboard texture
-			out->flags = 0;
+			if (out->flags & TEX_SPECIAL)
+				out->texture = loadmodel->textures[loadmodel->numtextures-1];
+			else
+				out->texture = loadmodel->textures[loadmodel->numtextures-2];
+			out->flags |= TEX_MISSING;
+			missing++;
 		}
 		else
 		{
-			if (miptex >= loadmodel->numtextures)
-				Sys_Error ("Mod_LoadTexinfo: miptex >= loadmodel->numtextures");
 			out->texture = loadmodel->textures[miptex];
-			if (!out->texture)
-			{
-				out->texture = r_notexture_mip;	// texture not found
-				out->flags = 0;
-			}
 		}
+		//johnfitz
 	}
+
+	//johnfitz: report missing textures
+	if (missing && loadmodel->numtextures > 1)
+		Con_Printf("Mod_LoadTexinfo: %d texture(s) missing from BSP file\n", missing);
+	//johnfitz
 }
 
 /*
@@ -1061,7 +1123,7 @@ void Mod_PolyForUnlitSurface(msurface_t *fa)
 	if (fa->flags & (SURF_DRAWTURB | SURF_DRAWSKY))
 		texscale = (1.0 / 128.0); //warp animation repeats every 128
 	else
-		texscale = (1.0 / 32.0); //to match r_notexture_mip
+		texscale = (1.0 / 16.0); //to match r_notexture_mip
 
 	// convert edges back to a normal polygon
 	numverts = 0;
@@ -1218,7 +1280,14 @@ void Mod_LoadFaces (lump_t *l, qboolean bsp2)
 		}
 		else if (ISTURBTEX(out->texinfo->texture->name)) // warp surface
 		{
-			out->flags |= (SURF_DRAWTURB | SURF_DRAWTILED);
+			out->flags |= SURF_DRAWTURB;
+			if (out->texinfo->flags & TEX_SPECIAL)
+				out->flags |= SURF_DRAWTILED;
+			else if (out->samples && !loadmodel->haslitwater)
+			{
+				Con_DPrintf("Map has lit water\n");
+				loadmodel->haslitwater = true;
+			}
 
 			// detect special liquid types
 			if (!strncmp(out->texinfo->texture->name, "*lava", 5))
@@ -1229,8 +1298,13 @@ void Mod_LoadFaces (lump_t *l, qboolean bsp2)
 				out->flags |= SURF_DRAWTELE;
 			else out->flags |= SURF_DRAWWATER;
 
-			Mod_PolyForUnlitSurface(out);
-			GL_SubdivideSurface(out);
+			// polys are only created for unlit water here.
+			// lit water is handled in BuildSurfaceDisplayList
+			if (out->flags & SURF_DRAWTILED)
+			{
+				Mod_PolyForUnlitSurface(out);
+				GL_SubdivideSurface(out);
+			}
 		}
 		else if (ISALPHATEX(out->texinfo->texture->name))
 		{
@@ -2476,7 +2550,7 @@ void Mod_LoadAliasModel (model_t *mod, void *buffer)
 	pheader->skinheight = LittleLong (pinmodel->skinheight);
 
 	if (pheader->skinheight > MAX_LBM_HEIGHT)
-		Sys_Error ("Mod_LoadAliasModel: model %s has a skin taller than %d", mod->name, MAX_LBM_HEIGHT);
+		Con_DPrintf("Mod_LoadAliasModel: model %s has a skin taller than %d", mod->name, MAX_LBM_HEIGHT);
 
 	pheader->numverts = LittleLong (pinmodel->numverts);
 	if (pheader->numverts <= 0)
@@ -3009,6 +3083,10 @@ void Mod_LoadQ3Model (model_t *mod, void *buffer)
 	mod->radius = radiusmax;
 
 	mod->flags |= header->flags;
+	
+	//joe: there's a bug with Ruohis's Shub spike model, which results the model dropping blood trail
+	if (!strcmp(mod->name, "progs/teleport.md3"))
+		mod->flags = 0;
 
 // load the animation frames if loading the player model
 	if (!strcmp(mod->name, cl_modelnames[mi_q3legs]))

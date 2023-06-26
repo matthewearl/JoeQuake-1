@@ -30,8 +30,13 @@ static	float	speedscale, speedscale2;	// for top sky and bottom sky
 static	msurface_t *warpface;
 
 qboolean	r_skyboxloaded;
-int			skybox_image_width, skybox_image_height;
 float		skyfog; // ericw 
+
+int			gl_warpimagesize;
+
+cvar_t r_oldwater = { "r_oldwater", "0", CVAR_ARCHIVE };
+cvar_t r_waterquality = { "r_waterquality", "8" };
+cvar_t r_waterwarp = { "r_waterwarp", "0" };
 
 extern	cvar_t	gl_subdivide_size;
 extern	cvar_t	r_skyfog;
@@ -48,6 +53,14 @@ float	turbsin_water[] =
 
 static	int		skytexorder[6] = { 0, 2, 1, 3, 4, 5 };
 static	char	*skybox_ext[6] = { "rt", "bk", "lf", "ft", "up", "dn" };
+
+typedef struct
+{
+	int		skybox_width;
+	int		skybox_height;
+} skybox_size_t;
+
+skybox_size_t skybox_images[6];
 
 #define	MAX_CLIP_VERTS	64
 
@@ -327,6 +340,71 @@ void DrawWaterPoly(glpoly_t *p)
 	}
 }
 
+//==============================================================================
+//
+//  RENDER-TO-FRAMEBUFFER WATER
+//
+//==============================================================================
+
+/*
+=============
+R_UpdateWarpTextures -- johnfitz -- each frame, update warping textures
+=============
+*/
+void R_UpdateWarpTextures(void)
+{
+	int i;
+	float x, y, x2, warptess;
+	texture_t *tx;
+
+	if (r_oldwater.value || cl.paused)
+		return;
+
+	warptess = 128.0 / bound(3.0, floor(r_waterquality.value), 64.0);
+
+	for (i = 0; i<cl.worldmodel->numtextures; i++)
+	{
+		if (!(tx = cl.worldmodel->textures[i]))
+			continue;
+
+		if (!tx->update_warp)
+			continue;
+
+		//render warp
+		GL_SetCanvas(CANVAS_WARPIMAGE);
+		GL_Bind(tx->gl_texturenum);
+		for (x = 0.0; x < 128.0; x = x2)
+		{
+			x2 = x + warptess;
+			glBegin(GL_TRIANGLE_STRIP);
+			for (y = 0.0; y < 128.01; y += warptess) // .01 for rounding errors
+			{
+				glTexCoord2f(WARPCALC(x, y), WARPCALC(y, x));
+				glVertex2f(x, y);
+				glTexCoord2f(WARPCALC(x2, y), WARPCALC(y, x2));
+				glVertex2f(x2, y);
+			}
+			glEnd();
+		}
+
+		//copy to texture
+		GL_Bind(tx->warp_texturenum);
+		glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, glx, gly + glheight - gl_warpimagesize, gl_warpimagesize, gl_warpimagesize);
+
+		if (qglGenerateMipmap)
+			qglGenerateMipmap(GL_TEXTURE_2D);
+
+		tx->update_warp = false;
+	}
+
+	// ericw -- workaround for osx 10.6 driver bug when using FSAA. R_Clear only clears the warpimage part of the screen.
+	GL_SetCanvas(CANVAS_DEFAULT);
+
+	//if warp render went down into sbar territory, we need to be sure to refresh it next frame
+	if (gl_warpimagesize + sb_lines > glheight)
+		Sbar_Changed();
+}
+
 //===============================================================
 
 /*
@@ -340,48 +418,57 @@ void R_InitSky(texture_t *mt)
 {
 	int			i, j, p, r, g, b;
 	byte		*src;
-	unsigned	trans[128 * 128], transpix, *rgba;
+	unsigned	*trans, transpix, halfwidth, *rgba;
 
-	src = (byte *)mt + mt->offsets[0];
+	if (mt->width != 256 || mt->height != 128)
+	{
+		Con_Printf("Sky texture %s is %d x %d, expected 256 x 128\n", mt->name, mt->width, mt->height);
+		if (mt->width < 2 || mt->height < 1)
+			return;
+	}
+
+	halfwidth = mt->width / 2;
+	trans = (unsigned *)Hunk_AllocName(halfwidth * mt->height * 4, "skytex");
+	src = (byte *)(mt + 1);
 
 	// make an average value for the back to avoid a fringe on the top level
 	r = g = b = 0;
-	for (i=0 ; i<128 ; i++)
-		for (j=0 ; j<128 ; j++)
+	for (i=0 ; i<mt->height ; i++)
+		for (j=0 ; j<halfwidth ; j++)
 		{
-			p = src[i*256 + j + 128];
+			p = src[i*mt->width + j + halfwidth];
 			rgba = &d_8to24table[p];
-			trans[(i*128) + j] = *rgba;
+			trans[(i*halfwidth) + j] = *rgba;
 			r += ((byte *)rgba)[0];
 			g += ((byte *)rgba)[1];
 			b += ((byte *)rgba)[2];
 		}
 
-	((byte *)&transpix)[0] = r / (128 * 128);
-	((byte *)&transpix)[1] = g / (128 * 128);
-	((byte *)&transpix)[2] = b / (128 * 128);
+	((byte *)&transpix)[0] = r / (halfwidth * mt->height);
+	((byte *)&transpix)[1] = g / (halfwidth * mt->height);
+	((byte *)&transpix)[2] = b / (halfwidth * mt->height);
 	((byte *)&transpix)[3] = 0;
 
 	if (!solidskytexture)
 		solidskytexture = texture_extension_number++;
 
 	GL_Bind (solidskytexture);
-	glTexImage2D (GL_TEXTURE_2D, 0, gl_solid_format, 128, 128, 0, GL_RGBA, GL_UNSIGNED_BYTE, trans);
+	glTexImage2D (GL_TEXTURE_2D, 0, gl_solid_format, halfwidth, mt->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, trans);
 	glTexParameterf (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, gl_filter_minmax_sky);
 	glTexParameterf (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, gl_filter_minmax_sky);
 
-	for (i=0 ; i<128 ; i++)
-		for (j=0 ; j<128 ; j++)
+	for (i=0 ; i<mt->height; i++)
+		for (j=0 ; j<halfwidth; j++)
 		{
-			p = src[i*256 + j];
-			trans[(i * 128) + j] = p ? d_8to24table[p] : transpix;
+			p = src[i*mt->width + j];
+			trans[(i*halfwidth) + j] = p ? d_8to24table[p] : transpix;
 		}
 
 	if (!alphaskytexture)
 		alphaskytexture = texture_extension_number++;
 
 	GL_Bind (alphaskytexture);
-	glTexImage2D (GL_TEXTURE_2D, 0, gl_alpha_format, 128, 128, 0, GL_RGBA, GL_UNSIGNED_BYTE, trans);
+	glTexImage2D (GL_TEXTURE_2D, 0, gl_alpha_format, halfwidth, mt->height, 0, GL_RGBA, GL_UNSIGNED_BYTE, trans);
 	glTexParameterf (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, gl_filter_minmax_sky);
 	glTexParameterf (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, gl_filter_minmax_sky);
 }
@@ -738,11 +825,12 @@ int R_SetSky(char *skyname)
 			return 1;
 		}
 
+		skybox_images[i].skybox_width = image_width;
+		skybox_images[i].skybox_height = image_height;
+
 		if (i == 0)
 			skyboxtextures = texnum;
 	}
-	skybox_image_width = image_width;
-	skybox_image_height = image_height;
 	r_skyboxloaded = true;
 
 	return 0;
@@ -772,12 +860,11 @@ Sky_SetBoxVert
 void Sky_SetBoxVert(float s, float t, int axis, vec3_t v)
 {
 	vec3_t		b;
-	int			j, k, farclip;
+	int			j, k;
 
-	farclip = max((int)r_farclip.value, 4096);
-	b[0] = s * farclip / sqrt(3.0);
-	b[1] = t * farclip / sqrt(3.0);
-	b[2] = farclip / sqrt(3.0);
+	b[0] = s * r_farclip.value / sqrt(3.0);
+	b[1] = t * r_farclip.value / sqrt(3.0);
+	b[2] = r_farclip.value / sqrt(3.0);
 
 	for (j = 0; j<3; j++)
 	{
@@ -804,8 +891,8 @@ void Sky_EmitSkyBoxVertex(float s, float t, int axis)
 	t = (t + 1)*0.5;
 
 	// avoid bilerp seam
-	w = skybox_image_width;
-	h = skybox_image_height;
+	w = skybox_images[skytexorder[axis]].skybox_width;
+	h = skybox_images[skytexorder[axis]].skybox_height;
 	s = s * (w - 1) / w + 0.5 / w;
 	t = t * (h - 1) / h + 0.5 / h;
 
