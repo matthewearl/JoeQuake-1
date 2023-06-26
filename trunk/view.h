@@ -56,8 +56,8 @@ extern	byte	current_pal[768];
 extern	cvar_t	lcd_x, lcd_yaw;
 #endif
 
-int _view_temp_int;
-float _view_temp_float;
+static int _view_temp_int;
+static float _view_temp_float;
 
 #define	ELEMENT_X_COORD(var)	\
 (_view_temp_int = Sbar_GetScaledCharacterSize(),\
