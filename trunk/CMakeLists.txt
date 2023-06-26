@@ -19,6 +19,7 @@ add_executable(joequake-gl
     chase.c
     client.h
     cl_demo.c
+    cl_dzip.c
     cl_input.c
     cl_main.c
     cl_parse.c
@@ -124,6 +125,12 @@ add_executable(joequake-gl
     world.h
     zone.c
     zone.h
+    ghost/demoparse.c
+    ghost/demoparse.h
+    ghost/ghost.c
+    ghost/ghost.h
+    ghost/ghost_private.h
+    ghost/ghostparse.c
 )
 
 target_compile_definitions(joequake-gl
