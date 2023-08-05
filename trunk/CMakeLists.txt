@@ -1,3 +1,5 @@
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -m32")
+
 add_library(joequake_minizip
     ioapi.c
     ioapi.h
