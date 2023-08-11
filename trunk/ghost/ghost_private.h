@@ -26,9 +26,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #endif
 
 
-#define GHOST_MAX_CLIENTS   8
-
-
 typedef enum {
     GHOST_MODEL_PLAYER = 0,
     GHOST_MODEL_EYES,
@@ -48,6 +45,7 @@ typedef struct {
 
 typedef struct {
     char client_names[GHOST_MAX_CLIENTS][MAX_SCOREBOARDNAME];
+    byte client_colors[GHOST_MAX_CLIENTS];
     float finish_time;
     ghostrec_t *records;
     int num_records;

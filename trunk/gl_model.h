@@ -535,7 +535,9 @@ typedef struct model_s
 
 // volume occupied by the model graphics
 	vec3_t		mins, maxs;
-	float		radius;
+	vec3_t		ymins, ymaxs; //johnfitz -- bounds for entities with nonzero yaw
+	vec3_t		rmins, rmaxs; //johnfitz -- bounds for entities with nonzero pitch or roll
+	float		radius;		//joe: only used for quake3 models now
 
 // solid volume for clipping
 	qboolean	clipbox;
@@ -612,5 +614,6 @@ byte *Mod_LeafPVS (mleaf_t *leaf, model_t *model);
 byte *Mod_NoVisPVS(model_t *model);
 
 qboolean Mod_IsAnyKindOfPlayerModel(model_t *mod);
+qboolean Mod_IsMonsterModel(int modelindex);
 
 #endif	// __MODEL__

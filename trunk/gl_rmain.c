@@ -39,6 +39,7 @@ int		c_brush_polys, c_alias_polys, c_md3_polys;
 int		particletexture;	// little dot for particles
 int		particletexture2;	// little square for particles
 int		playertextures;		// up to 16 color translated skins
+int		ghosttextures;		// up to 16 color translated skins for the ghost entity
 int		skyboxtextures;
 int		underwatertexture, detailtexture;
 int		damagetexture;
@@ -103,7 +104,7 @@ cvar_t	r_drawflame = {"r_drawflame", "1"};
 qboolean OnChange_r_noshadow_list(cvar_t *var, char *string);
 cvar_t	r_noshadow_list = { "r_noshadow_list", "", 0, OnChange_r_noshadow_list };
 
-cvar_t	r_farclip = {"r_farclip", "16384"};
+cvar_t	r_farclip = {"r_farclip", "65536"};	//joe: increased to support larger maps
 qboolean OnChange_r_skybox (cvar_t *var, char *string);
 cvar_t	r_skybox = {"r_skybox", "", 0, OnChange_r_skybox };
 qboolean OnChange_r_skyfog(cvar_t *var, char *string);
@@ -163,7 +164,7 @@ extern cvar_t r_waterquality;
 extern cvar_t r_oldwater;
 extern cvar_t r_waterwarp;
 
-int		lightmode = 2;
+int		lightmode = 2;	// 1: normal (not used), 2: overbright (always used)
 
 float	pitch_rot;
 #if 0
@@ -310,10 +311,11 @@ Returns true if the box is completely outside the frustum
 */
 qboolean R_CullBox (vec3_t emins, vec3_t emaxs)
 {
-	int i;
+	int		i;
 	mplane_t *p;
-	byte signbits;
-	float vec[3];
+	byte	signbits;
+	float	vec[3];
+
 	for (i = 0; i < 4; i++)
 	{
 		p = frustum + i;
@@ -344,6 +346,47 @@ qboolean R_CullSphere (vec3_t centre, float radius)
 			return true;
 
 	return false;
+}
+
+/*
+===============
+R_CullModelForEntity -- johnfitz -- uses correct bounds based on rotation
+===============
+*/
+qboolean R_CullModelForEntity(entity_t *e)
+{
+	vec3_t	mins, maxs;
+	vec_t	scalefactor, *minbounds, *maxbounds;
+
+	if (e->angles[0] || e->angles[2]) //pitch or roll
+	{
+		minbounds = e->model->rmins;
+		maxbounds = e->model->rmaxs;
+	}
+	else if (e->angles[1]) //yaw
+	{
+		minbounds = e->model->ymins;
+		maxbounds = e->model->ymaxs;
+	}
+	else //no rotation
+	{
+		minbounds = e->model->mins;
+		maxbounds = e->model->maxs;
+	}
+
+	scalefactor = ENTSCALE_DECODE(e->scale);
+	if (scalefactor != 1.0f)
+	{
+		VectorMA(e->origin, scalefactor, minbounds, mins);
+		VectorMA(e->origin, scalefactor, maxbounds, maxs);
+	}
+	else
+	{
+		VectorAdd(e->origin, minbounds, mins);
+		VectorAdd(e->origin, maxbounds, maxs);
+	}
+
+	return R_CullBox(mins, maxs);
 }
 
 /*
@@ -513,6 +556,7 @@ void R_DrawSpriteModel (entity_t *ent)
 	vec3_t		point, right, up;
 	mspriteframe_t	*frame;
 	msprite_t	*psprite;
+	float		scale = ENTSCALE_DECODE(ent->scale);
 
 	// don't even bother culling, because it's just a single
 	// polygon without a surface cache
@@ -548,23 +592,23 @@ void R_DrawSpriteModel (entity_t *ent)
 	glBegin (GL_QUADS);
 
 	glTexCoord2f (0, 1);
-	VectorMA (ent->origin, frame->down, up, point);
-	VectorMA (point, frame->left, right, point);
+	VectorMA (ent->origin, frame->down * scale, up, point);
+	VectorMA (point, frame->left * scale, right, point);
 	glVertex3fv (point);
 
 	glTexCoord2f (0, 0);
-	VectorMA (ent->origin, frame->up, up, point);
-	VectorMA (point, frame->left, right, point);
+	VectorMA (ent->origin, frame->up * scale, up, point);
+	VectorMA (point, frame->left * scale, right, point);
 	glVertex3fv (point);
 
 	glTexCoord2f (1, 0);
-	VectorMA (ent->origin, frame->up, up, point);
-	VectorMA (point, frame->right, right, point);
+	VectorMA (ent->origin, frame->up * scale, up, point);
+	VectorMA (point, frame->right * scale, right, point);
 	glVertex3fv (point);
 
 	glTexCoord2f (1, 1);
-	VectorMA (ent->origin, frame->down, up, point);
-	VectorMA (point, frame->right, right, point);
+	VectorMA (ent->origin, frame->down * scale, up, point);
+	VectorMA (point, frame->right * scale, right, point);
 	glVertex3fv (point);
 	
 	glEnd ();
@@ -584,10 +628,7 @@ float	r_avertexnormals[NUMVERTEXNORMALS][3] =
 #include "anorms.h"
 ;
 
-vec3_t	shadevector;
-
 qboolean full_light;
-float	shadelight, ambientlight;
 
 // precalculated dot products for quantized angles
 #define SHADEDOT_QUANT 16
@@ -595,6 +636,7 @@ float	r_avertexnormal_dots[SHADEDOT_QUANT][256] =
 #include "anorm_dots.h"
 ;
 
+vec3_t	shadevector;
 float	*shadedots = r_avertexnormal_dots[0];
 
 float	apitch, ayaw;
@@ -607,8 +649,6 @@ static GLuint lerpDistLoc;
 static GLuint shadevectorLoc;
 static GLuint lightColorLoc;
 static GLuint useVertexLightingLoc;
-static GLuint shadeLightLoc;
-static GLuint ambientLightLoc;
 static GLuint aPitchLoc;
 static GLuint aYawLoc;
 
@@ -689,8 +729,6 @@ void GLAlias_CreateShaders(void)
 		"uniform vec3 ShadeVector;\n"
 		"uniform vec4 LightColor;\n"
 		"uniform bool UseVertexLighting;\n"
-		"uniform float ShadeLight;\n"
-		"uniform float AmbientLight;\n"
 		"uniform float APitch;\n"
 		"uniform float AYaw;\n"
 		"layout(std140, binding = 0) uniform ModelViewProjectionMatrix\n"
@@ -771,16 +809,13 @@ void GLAlias_CreateShaders(void)
 		"		int pose2_lni = int(Pose2Vert.w);\n"
 		"		float l = R_LerpVertexLight(AnormPitch[pose1_lni], AnormYaw[pose1_lni], AnormPitch[pose2_lni], AnormYaw[pose2_lni], Blend, APitch, AYaw);\n"
 		"		l = min(l, 1.0);\n"
-		"		ColorOut = vec4(vec3(LightColor.xyz / 256.0 + l), LightColor.w);\n"
+		"		ColorOut = vec4(vec3(LightColor.xyz * (200.0 / 256.0) + l), LightColor.w);\n"
 		"	}\n"
 		"	else\n"
 		"	{\n"
 		"		float dot1 = r_avertexnormal_dot(Pose1Normal.xyz);\n"
 		"		float dot2 = r_avertexnormal_dot(Pose2Normal.xyz);\n"
-		"		float l = mix(dot1, dot2, Blend);\n"
-		"		l = (l * ShadeLight + AmbientLight) / 256.0;\n"
-		"		l = min(l, 1.0);\n"
-		"		ColorOut = vec4(vec3(l), LightColor.w);\n"
+		"		ColorOut = LightColor * vec4(vec3(mix(dot1, dot2, Blend)), 1.0);\n"
 		"	}\n"
 		"}\n";
 
@@ -844,8 +879,6 @@ void GLAlias_CreateShaders(void)
 		shadevectorLoc = GL_GetUniformLocation(&r_alias_program, "ShadeVector");
 		lightColorLoc = GL_GetUniformLocation(&r_alias_program, "LightColor");
 		useVertexLightingLoc = GL_GetUniformLocation(&r_alias_program, "UseVertexLighting");
-		shadeLightLoc = GL_GetUniformLocation(&r_alias_program, "ShadeLight");
-		ambientLightLoc = GL_GetUniformLocation(&r_alias_program, "AmbientLight");
 		aPitchLoc = GL_GetUniformLocation(&r_alias_program, "APitch");
 		aYawLoc = GL_GetUniformLocation(&r_alias_program, "AYaw");
 		texLoc = GL_GetUniformLocation(&r_alias_program, "Tex");
@@ -976,8 +1009,6 @@ void R_DrawAliasFrame_GLSL(int frame, aliashdr_t *paliashdr, entity_t *ent, int 
 	qglUniform3f(shadevectorLoc, shadevector[0], shadevector[1], shadevector[2]);
 	qglUniform4f(lightColorLoc, lightcolor[0], lightcolor[1], lightcolor[2], ent->transparency);
 	qglUniform1i(useVertexLightingLoc, (gl_vertexlights.value && !full_light) ? 1 : 0);
-	qglUniform1f(shadeLightLoc, shadelight);
-	qglUniform1f(ambientLightLoc, ambientlight);
 	qglUniform1f(aPitchLoc, apitch);
 	qglUniform1f(aYawLoc, ayaw);
 	
@@ -1248,17 +1279,14 @@ void R_DrawAliasFrame (int frame, aliashdr_t *paliashdr, entity_t *ent, int dist
 				l = min(l, 1);
 
 				for (i = 0 ; i < 3 ; i++)
-					lightvec[i] = lightcolor[i] / 256 + l;
-				glColor4f (lightvec[0], lightvec[1], lightvec[2], ent->transparency);
+					lightvec[i] = lightcolor[i] * (200.0 / 256.0) + l;
 			}
 			else
 			{
 				l = FloatInterpolate (shadedots[verts1->lightnormalindex], lerpfrac, shadedots[verts2->lightnormalindex]);
-				l = (l * shadelight + ambientlight) / 256;
-				l = min(l, 1);
-
-				glColor4f (l, l, l, ent->transparency);
+				VectorScale(lightcolor, l, lightvec);
 			}
+			glColor4f(lightvec[0], lightvec[1], lightvec[2], ent->transparency);
 
 			VectorInterpolate (verts1->v, lerpfrac, verts2->v, interpolated_verts);
 			glVertex3fv (interpolated_verts);
@@ -1358,7 +1386,7 @@ R_SetupLighting
 */
 void R_SetupLighting (entity_t *ent)
 {
-	int		i, lnum;
+	int		lnum;
 	float	add, theta;
 	vec3_t	dist, dlight_color;
 	model_t	*clmodel = ent->model;
@@ -1367,42 +1395,44 @@ void R_SetupLighting (entity_t *ent)
 	// make thunderbolt and torches full light
 	if (clmodel->modhint == MOD_THUNDERBOLT)
 	{
-		ambientlight = 210;
-		shadelight = 0;
+		lightcolor[0] = 210.0f;
+		lightcolor[1] = 210.0f;
+		lightcolor[2] = 210.0f;
 		full_light = ent->noshadow = true;
-		return;
+		goto end;
 	}
 	else if (clmodel->modhint == MOD_FLAME)
 	{
-		ambientlight = 255;
-		shadelight = 0;
+		lightcolor[0] = 256.0f;
+		lightcolor[1] = 256.0f;
+		lightcolor[2] = 256.0f;
 		full_light = ent->noshadow = true;
-		return;
+		goto end;
 	}
 	else if (clmodel->modhint == MOD_Q3GUNSHOT || clmodel->modhint == MOD_Q3TELEPORT || clmodel->modhint == MOD_QLTELEPORT)
 	{
-		ambientlight = 128;
-		shadelight = 0;
+		lightcolor[0] = 128.0f;
+		lightcolor[1] = 128.0f;
+		lightcolor[2] = 128.0f;
 		full_light = ent->noshadow = true;
-		return;
+		goto end;
 	}
 
-	// normal lighting
 	// if the initial trace is completely black, try again from above
 	// this helps with models whose origin is slightly below ground level
 	// (e.g. some of the candles in the DOTM start map)
-	ambientlight = shadelight = R_LightPoint(ent->origin);
-	if (!ambientlight)
+	if (!R_LightPoint(ent->origin))
 	{
 		vec3_t lpos;
 		VectorCopy(ent->origin, lpos);
 		lpos[2] += ent->model->maxs[2] * 0.5f;
-		ambientlight = shadelight = R_LightPoint(lpos);
+		R_LightPoint(lpos);
 	}
 
 	full_light = false;
 	ent->noshadow = (clmodel->flags & EF_NOSHADOW);
 
+	// add dlights
 	for (lnum = 0 ; lnum < MAX_DLIGHTS ; lnum++)
 	{
 		if (cl_dlights[lnum].die < cl.time || !cl_dlights[lnum].radius)
@@ -1413,37 +1443,12 @@ void R_SetupLighting (entity_t *ent)
 
 		if (add > 0)
 		{
-		// joe: only allow colorlight affection if dynamic lights are on
+			// joe: only allow colorlight affection if dynamic lights are on
 			if (r_dynamic.value)
 			{
-				shadelight += add;
 				VectorCopy (bubblecolor[cl_dlights[lnum].type], dlight_color);
-				for (i = 0 ; i < 3 ; i++)
-				{
-					lightcolor[i] = lightcolor[i] + (dlight_color[i] * add) * 2;
-					if (lightcolor[i] > 256)
-					{
-						switch (i)
-						{
-						case 0:
-							lightcolor[1] = lightcolor[1] - (lightcolor[1] / 3);
-							lightcolor[2] = lightcolor[2] - (lightcolor[2] / 3);
-							break;
-
-						case 1:
-							lightcolor[0] = lightcolor[0] - (lightcolor[0] / 3);
-							lightcolor[2] = lightcolor[2] - (lightcolor[2] / 3);
-							break;
-
-						case 2:
-							lightcolor[1] = lightcolor[1] - (lightcolor[1] / 3);
-							lightcolor[0] = lightcolor[0] - (lightcolor[0] / 3);
-							break;
-						}
-					}
-				}
+				VectorMA(lightcolor, add, dlight_color, lightcolor);
 			}
-			ambientlight += add;
 		}
 	}
 
@@ -1455,16 +1460,57 @@ void R_SetupLighting (entity_t *ent)
 	}
 
 	// clamp lighting so it doesn't overbright as much
-	ambientlight = min(128, ambientlight);
-	if (ambientlight + shadelight > 192)
-		shadelight = 192 - ambientlight;
+	if (lightmode == 2)
+	{
+		add = 288.0f / (lightcolor[0] + lightcolor[1] + lightcolor[2]);
+		if (add < 1.0f)
+			VectorScale(lightcolor, add, lightcolor);
+	}
 
+	// always give the gun some light
 	if (ent == &cl.viewent)
 	{
 		ent->noshadow = true;
-		// always give the gun some light
-		if (ambientlight < 24)
-			ambientlight = shadelight = 24;
+
+		add = 72.0f - (lightcolor[0] + lightcolor[1] + lightcolor[2]);
+		if (add > 0.0f)
+		{
+			lightcolor[0] += add / 3.0f;
+			lightcolor[1] += add / 3.0f;
+			lightcolor[2] += add / 3.0f;
+		}
+	}
+
+	// never allow players to go totally black
+	if (Mod_IsAnyKindOfPlayerModel(clmodel))
+	{
+		// brighten player models if r_fullbrightskins is not 0
+		if (r_fullbrightskins.value)
+		{
+			lightcolor[0] = 128.0f;
+			lightcolor[1] = 128.0f;
+			lightcolor[2] = 128.0f;
+			full_light = true;
+		}
+		else
+		{
+			add = 24.0f - (lightcolor[0] + lightcolor[1] + lightcolor[2]);
+			if (add > 0.0f)
+			{
+				lightcolor[0] += add / 3.0f;
+				lightcolor[1] += add / 3.0f;
+				lightcolor[2] += add / 3.0f;
+			}
+		}
+	}
+
+	// brighten monster models if r_fullbrightskins is 2
+	if (Mod_IsMonsterModel(ent->modelindex) && r_fullbrightskins.value == 2)
+	{
+		lightcolor[0] = 128.0f;
+		lightcolor[1] = 128.0f;
+		lightcolor[2] = 128.0f;
+		full_light = true;
 	}
 
 	if (!shadescale)
@@ -1473,36 +1519,22 @@ void R_SetupLighting (entity_t *ent)
 
 	VectorSet(shadevector, cos(theta) * shadescale, sin(theta) * shadescale, shadescale);
 
-	// never allow players to go totally black
-	if (Mod_IsAnyKindOfPlayerModel(clmodel))
-	{
-		if (ambientlight < 8)
-			ambientlight = shadelight = 8;
-		if (r_fullbrightskins.value)
-		{
-			ambientlight = shadelight = 128;
-			full_light = true;
-		}
-	}
+	shadedots = r_avertexnormal_dots[((int)(ent->angles[1] * (SHADEDOT_QUANT / 360.0))) & (SHADEDOT_QUANT - 1)];
 
-	if (r_fullbrightskins.value == 2 &&
-		(ent->modelindex == cl_modelindex[mi_fish] ||
-		ent->modelindex == cl_modelindex[mi_dog] ||
-		ent->modelindex == cl_modelindex[mi_soldier] ||
-		ent->modelindex == cl_modelindex[mi_enforcer] ||
-		ent->modelindex == cl_modelindex[mi_knight] ||
-		ent->modelindex == cl_modelindex[mi_hknight] ||
-		ent->modelindex == cl_modelindex[mi_scrag] ||
-		ent->modelindex == cl_modelindex[mi_ogre] ||
-		ent->modelindex == cl_modelindex[mi_fiend] ||
-		ent->modelindex == cl_modelindex[mi_vore] ||
-		ent->modelindex == cl_modelindex[mi_shambler] ||
-		ent->modelindex == cl_modelindex[mi_zombie] ||
-		ent->modelindex == cl_modelindex[mi_spawn]))
-	{
-		ambientlight = shadelight = 128;
-		full_light = true;
-	}
+end:
+	VectorScale(lightcolor, 1.0f / 200.0f, lightcolor);
+}
+
+/*
+=============
+MaxLightColor
+
+joe: find the brightest color component used for shadow depth
+=============
+*/
+float MaxLightColor()
+{
+	return max(max(lightcolor[0], lightcolor[1]), lightcolor[2]);
 }
 
 /*
@@ -1572,32 +1604,22 @@ R_DrawAliasModel
 void R_DrawAliasModel (entity_t *ent)
 {
 	int			i, anim, skinnum, distance, texture, fb_texture;
-	vec3_t		mins, maxs;
+	vec3_t		mins;
 	aliashdr_t	*paliashdr;
 	model_t		*clmodel = ent->model;
 	qboolean	islumaskin, alphatest = !!(ent->model->flags & MF_HOLEY);
+	float		scalefactor = 1.0f;
 
-	VectorAdd (ent->origin, clmodel->mins, mins);
-	VectorAdd (ent->origin, clmodel->maxs, maxs);
+	VectorAdd (ent->origin, clmodel->mins, mins);	//joe: used only for shadows now
 
-	if (ent->angles[0] || ent->angles[1] || ent->angles[2])
-	{
-		if (R_CullSphere(ent->origin, clmodel->radius))
-			return;
-	}
-	else
-	{
-		if (R_CullBox(mins, maxs))
-			return;
-	}
+	if (R_CullModelForEntity(ent))
+		return;
 
 	VectorCopy (ent->origin, r_entorigin);
 	VectorSubtract (r_origin, r_entorigin, modelorg);
 
 	// get lighting information
 	R_SetupLighting (ent);
-
-	shadedots = r_avertexnormal_dots[((int)(ent->angles[1] * (SHADEDOT_QUANT / 360.0))) & (SHADEDOT_QUANT - 1)];
 
 	// locate the proper data
 	paliashdr = (aliashdr_t *)Mod_Extradata (clmodel);
@@ -1614,6 +1636,12 @@ void R_DrawAliasModel (entity_t *ent)
 		R_RotateForViewEntity (ent);
 	else
 		R_RotateForEntity (ent, false);
+
+	scalefactor = ENTSCALE_DECODE(ent->scale);
+	if (scalefactor != 1.0f)
+	{
+		glScalef(scalefactor, scalefactor, scalefactor);
+	}
 
 	if (clmodel->modhint == MOD_EYES && gl_doubleeyes.value)
 	{
@@ -1654,24 +1682,38 @@ void R_DrawAliasModel (entity_t *ent)
 	// seperately for the players. Heads are just uncolored.
 	if (ent->colormap != vid.colormap && !gl_nocolors.value)
 	{
-		extern entity_t	*ghost_entity;
+		extern int player_32bit_skins[14];
+		extern qboolean player_32bit_skins_loaded;
 
-		// imitate the same colors for the ghost model as the player
-		i = (ent == ghost_entity) ? 1 : ent - cl_entities;
-
-		if (i > 0 && i <= cl.maxclients)
+		if (ent == ghost_entity)
 		{
-			extern int player_32bit_skins[14];
-			extern qboolean player_32bit_skins_loaded;
+			i = 1;	// currently only supporting 1 ghost player
 
 			if (clmodel->modhint == MOD_PLAYER && player_32bit_skins_loaded && gl_externaltextures_models.value)
 			{
-				texture = player_32bit_skins[cl.scores[i-1].colors / 16];
+				texture = player_32bit_skins[ghost_color_info[i-1].colors / 16];
 			}
 			else
 			{
-				texture = playertextures - 1 + i;
-				fb_texture = player_fb_skins[i-1];
+				texture = ghosttextures - 1 + i;
+				fb_texture = ghost_fb_skins[i-1];
+			}
+		}
+		else
+		{
+			i = ent - cl_entities;
+
+			if (i > 0 && i <= cl.maxclients)
+			{
+				if (clmodel->modhint == MOD_PLAYER && player_32bit_skins_loaded && gl_externaltextures_models.value)
+				{
+					texture = player_32bit_skins[cl.scores[i-1].colors / 16];
+				}
+				else
+				{
+					texture = playertextures - 1 + i;
+					fb_texture = player_fb_skins[i-1];
+				}
 			}
 		}
 	}
@@ -1812,7 +1854,7 @@ void R_DrawAliasModel (entity_t *ent)
 		glDepthMask (GL_FALSE);
 		glDisable (GL_TEXTURE_2D);
 		glEnable (GL_BLEND);
-		glColor4f (0, 0, 0, (ambientlight - (mins[2] - downtrace.endpos[2])) / 150);
+		glColor4f (0, 0, 0, ((MaxLightColor() * 200.0f) - (mins[2] - downtrace.endpos[2])) / 150);
 		if (gl_have_stencil && r_shadows.value == 2)
 		{
 			glEnable (GL_STENCIL_TEST);
@@ -2262,17 +2304,14 @@ void R_DrawQ3Frame (int frame, md3header_t *pmd3hdr, md3surface_t *pmd3surf, ent
 				l = min(l, 1);
 
 				for (j = 0; j < 3; j++)
-					lightvec[j] = lightcolor[j] / 256 + l;
-				glColor4f(lightvec[0], lightvec[1], lightvec[2], ent->transparency);
+					lightvec[j] = lightcolor[j] * (200.0 / 256.0) + l;
 			}
 			else
 			{
 				l = FloatInterpolate(shadedots[v1->oldnormal >> 8], lerpfrac, shadedots[v2->oldnormal >> 8]);
-				l = (l * shadelight + ambientlight) / 256;
-				l = min(l, 1);
-
-				glColor4f(l, l, l, ent->transparency);
+				VectorScale(lightcolor, l, lightvec);
 			}
+			glColor4f(lightvec[0], lightvec[1], lightvec[2], ent->transparency);
 		}
 
 		VectorInterpolate (v1->vec, lerpfrac, v2->vec, interpolated_verts);
@@ -2629,6 +2668,7 @@ void R_DrawQ3Model (entity_t *ent)
 {
 	vec3_t		mins, maxs, md3_scale_origin = {0, 0, 0};
 	model_t		*clmodel = ent->model;
+	float		scalefactor = 1.0f;
 
 	if (clmodel->modhint == MOD_Q3TELEPORT)
 		ent->origin[2] -= 30;
@@ -2657,14 +2697,18 @@ void R_DrawQ3Model (entity_t *ent)
 	// get lighting information
 	R_SetupLighting (ent);
 
-	shadedots = r_avertexnormal_dots[((int)(ent->angles[1] * (SHADEDOT_QUANT / 360.0))) & (SHADEDOT_QUANT - 1)];
-
 	glPushMatrix ();
 
 	if (ent == &cl.viewent)
 		R_RotateForViewEntity (ent);
 	else
 		R_RotateForEntity (ent, false);
+
+	scalefactor = ENTSCALE_DECODE(ent->scale);
+	if (scalefactor != 1.0f)
+	{
+		glScalef(scalefactor, scalefactor, scalefactor);
+	}
 
 	if (ent == &cl.viewent)
 	{
@@ -2740,7 +2784,7 @@ void R_DrawQ3Model (entity_t *ent)
 		glDepthMask (GL_FALSE);
 		glDisable (GL_TEXTURE_2D);
 		glEnable (GL_BLEND);
-		glColor4f (0, 0, 0, (ambientlight - (mins[2] - downtrace.endpos[2])) / 150);
+		glColor4f (0, 0, 0, ((MaxLightColor() * 200.0f) - (mins[2] - downtrace.endpos[2])) / 150);
 		if (gl_have_stencil && r_shadows.value == 2) 
 		{
 			glEnable (GL_STENCIL_TEST);
@@ -3459,6 +3503,12 @@ void R_Init (void)
 
 	// fullbright skins
 	texture_extension_number += 16;
+
+	ghosttextures = texture_extension_number;
+	texture_extension_number += 16;
+
+	// fullbright skins for ghosts - in the future
+	//texture_extension_number += 16;
 }
 
 /*

@@ -161,6 +161,7 @@ extern	int	currenttexture;
 extern	int	particletexture;
 extern	int	particletexture2;
 extern	int	playertextures;
+extern	int	ghosttextures;
 extern	int	skyboxtextures;
 extern	int	underwatertexture, detailtexture;
 extern	int	damagetexture;
@@ -411,6 +412,7 @@ void R_BrightenScreen (void);
 void R_Q3DamageDraw (void);
 void GLAlias_CreateShaders(void);
 void GLSLGamma_GammaCorrect(void);
+qboolean R_CullModelForEntity(entity_t *ent);
 
 #define NUMVERTEXNORMALS	162
 extern	float	r_avertexnormals[NUMVERTEXNORMALS][3];

@@ -43,6 +43,8 @@ unsigned short	pr_crc;
 typedef int32_t void_ptr_t;  // make sure that these "pointers" are still 32bit in size, even on 64bit compiles
 int		type_size[8] = {1, sizeof(string_t) / 4, 1, 3, 1, 1, sizeof(func_t) / 4, sizeof(void_ptr_t) / 4};
 
+#define NUM_TYPE_SIZES (int)(sizeof(type_size) / sizeof(type_size[0]))
+
 ddef_t *ED_FieldAtOfs (int ofs);
 qboolean ED_ParseEpair (void *base, ddef_t *key, char *s);
 
@@ -74,7 +76,7 @@ int	eval_ammo_lava_nails, eval_ammo_rockets1, eval_ammo_multi_rockets;
 int	eval_ammo_cells1, eval_ammo_plasma;
 
 // nehahra specific
-int	eval_alpha, eval_fullbright, eval_idealpitch, eval_pitch_speed;
+int	eval_alpha, eval_scale, eval_fullbright, eval_idealpitch, eval_pitch_speed;
 
 ddef_t *ED_FindField (char *name);
 
@@ -100,7 +102,8 @@ void FindEdictFieldOffsets (void)
 	eval_ammo_cells1 = FindFieldOffset ("ammo_cells1");
 	eval_ammo_plasma = FindFieldOffset ("ammo_plasma");
 
-	eval_alpha = FindFieldOffset ("alpha");
+	eval_alpha = FindFieldOffset("alpha");
+	eval_scale = FindFieldOffset ("scale");
 	eval_fullbright = FindFieldOffset ("fullbright");
 	eval_idealpitch = FindFieldOffset ("idealpitch");
 	eval_pitch_speed = FindFieldOffset ("pitch_speed");
@@ -153,6 +156,7 @@ edict_t *ED_Alloc (void)
 	sv.num_edicts++;
 	e = EDICT_NUM(i);
 	memset(e, 0, pr_edict_size); // ericw -- switched sv.edicts to malloc(), so we are accessing uninitialized memory and must fully zero it, not just ED_ClearEdict 
+	e->baseline.scale = ENTSCALE_DEFAULT;
 
 	return e;
 }
@@ -181,6 +185,7 @@ void ED_Free (edict_t *ed)
 	ed->v.nextthink = -1;
 	ed->v.solid = 0;
 	ed->alpha = ENTALPHA_DEFAULT; //johnfitz -- reset alpha for next entity 
+	ed->scale = ENTSCALE_DEFAULT;
 
 	ed->freetime = sv.time;
 }
@@ -490,6 +495,9 @@ void ED_Print (edict_t *ed)
 	// if the value is still all 0, skip the field
 		type = d->type & ~DEF_SAVEGLOBAL;
 
+		if (type >= NUM_TYPE_SIZES)
+			continue;
+
 		for (j=0 ; j<type_size[type] ; j++)
 			if (v[j])
 				break;
@@ -537,6 +545,10 @@ void ED_Write (FILE *f, edict_t *ed)
 
 	// if the value is still all 0, skip the field
 		type = d->type & ~DEF_SAVEGLOBAL;
+
+		if (type >= NUM_TYPE_SIZES)
+			continue;
+
 		for (j=0 ; j<type_size[type] ; j++)
 			if (v[j])
 				break;
@@ -945,6 +957,10 @@ void SwitchToHigherProtocolVersionIfNeeded(edict_t *ent)
 		))
 	{
 		sv.protocol = PROTOCOL_FITZQUAKE;
+		if (ent->scale != ENTSCALE_DEFAULT)
+		{
+			sv.protocol = PROTOCOL_RMQ;
+		}
 	}
 }
 
