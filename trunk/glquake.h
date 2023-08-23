@@ -161,6 +161,7 @@ extern	int	currenttexture;
 extern	int	particletexture;
 extern	int	particletexture2;
 extern	int	playertextures;
+extern	int	ghosttextures;
 extern	int	skyboxtextures;
 extern	int	underwatertexture, detailtexture;
 extern	int	damagetexture;
@@ -275,6 +276,12 @@ typedef void (APIENTRY *lpGenerateMipmapFUNC)(GLenum);
 // Multitexture
 typedef void (APIENTRY *lpMTexFUNC)(GLenum, GLfloat, GLfloat);
 typedef void (APIENTRY *lpSelTexFUNC)(GLenum);
+
+//johnfitz -- anisotropic filtering
+#define	GL_TEXTURE_MAX_ANISOTROPY_EXT		0x84FE
+#define	GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT	0x84FF
+extern	float		gl_max_anisotropy;
+extern	qboolean	gl_anisotropy_able;
 
 // VBO
 typedef void (APIENTRY *lpBindBufFUNC)(GLenum, GLuint);
@@ -411,6 +418,7 @@ void R_BrightenScreen (void);
 void R_Q3DamageDraw (void);
 void GLAlias_CreateShaders(void);
 void GLSLGamma_GammaCorrect(void);
+qboolean R_CullModelForEntity(entity_t *ent);
 
 #define NUMVERTEXNORMALS	162
 extern	float	r_avertexnormals[NUMVERTEXNORMALS][3];

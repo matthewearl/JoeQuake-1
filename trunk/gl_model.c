@@ -1050,8 +1050,8 @@ void CalcSurfaceExtents (msurface_t *s)
 	mvertex_t	*v;
 	mtexinfo_t	*tex;
 
-	mins[0] = mins[1] = 999999;
-	maxs[0] = maxs[1] = -999999;
+	mins[0] = mins[1] = FLT_MAX;
+	maxs[0] = maxs[1] = -FLT_MAX;
 
 	tex = s->texinfo;
 
@@ -1162,8 +1162,8 @@ void Mod_CalcSurfaceBounds(msurface_t *s)
 	int			i, e;
 	mvertex_t	*v;
 
-	s->mins[0] = s->mins[1] = s->mins[2] = 9999;
-	s->maxs[0] = s->maxs[1] = s->maxs[2] = -9999;
+	s->mins[0] = s->mins[1] = s->mins[2] = FLT_MAX;
+	s->maxs[0] = s->maxs[1] = s->maxs[2] = -FLT_MAX;
 
 	for (i = 0; i<s->numedges; i++)
 	{
@@ -1958,7 +1958,7 @@ void Mod_LoadBrushModel (model_t *mod, void *buffer)
 	int			i, j, bsp2;
 	dheader_t	*header;
 	dmodel_t 	*bm;
-	//float		radius; //johnfitz
+	float		radius; //johnfitz
 
 	loadmodel->type = mod_brush;
 
@@ -2033,7 +2033,11 @@ void Mod_LoadBrushModel (model_t *mod, void *buffer)
 		VectorCopy (bm->maxs, mod->maxs);
 		VectorCopy (bm->mins, mod->mins);
 
-		mod->radius = RadiusFromBounds(mod->mins, mod->maxs);
+		//johnfitz -- calculate rotate bounds and yaw bounds
+		radius = RadiusFromBounds(mod->mins, mod->maxs);
+		mod->rmaxs[0] = mod->rmaxs[1] = mod->rmaxs[2] = mod->ymaxs[0] = mod->ymaxs[1] = mod->ymaxs[2] = radius;
+		mod->rmins[0] = mod->rmins[1] = mod->rmins[2] = mod->ymins[0] = mod->ymins[1] = mod->ymins[2] = -radius;
+		//johnfitz
 
 		//johnfitz -- correct physics cullboxes so that outlying clip brushes on doors and stuff are handled right
 		if (i > 0 || strcmp(mod->name, sv.modelname) != 0) //skip submodel 0 of sv.worldmodel, which is the actual world
@@ -2290,7 +2294,7 @@ void *Mod_LoadAllSkins (int numskins, daliasskintype_t *pskintype)
 
 	size = pheader->skinwidth * pheader->skinheight;
 
-	COM_StripExtension (COM_SkipPath(loadmodel->name), basename);
+	COM_StripExtension (COM_SkipFirstSubfolder(loadmodel->name), basename);
 
 	texture_flag = TEX_MIPMAP;
 	if (loadmodel->flags & MF_HOLEY)
@@ -2400,6 +2404,58 @@ void *Mod_LoadAllSkins (int numskins, daliasskintype_t *pskintype)
 	return (void *)pskintype;
 }
 
+/*
+=================
+Mod_CalcAliasBounds -- johnfitz -- calculate bounds of alias model for nonrotated, yawrotated, and fullrotated cases
+=================
+*/
+static void Mod_CalcAliasBounds(aliashdr_t *a)
+{
+	int			i, j, k;
+	float		dist, yawradius, radius;
+	vec3_t		v;
+
+	//clear out all data
+	for (i = 0; i < 3; i++)
+	{
+		loadmodel->mins[i] = loadmodel->ymins[i] = loadmodel->rmins[i] = FLT_MAX;
+		loadmodel->maxs[i] = loadmodel->ymaxs[i] = loadmodel->rmaxs[i] = -FLT_MAX;
+		radius = yawradius = 0;
+	}
+
+	//process verts
+	for (i = 0; i < a->numposes; i++)
+		for (j = 0; j < a->numverts; j++)
+		{
+			for (k = 0; k < 3; k++)
+				v[k] = poseverts[i][j].v[k] * pheader->scale[k] + pheader->scale_origin[k];
+
+			for (k = 0; k < 3; k++)
+			{
+				loadmodel->mins[k] = min(loadmodel->mins[k], v[k]);
+				loadmodel->maxs[k] = max(loadmodel->maxs[k], v[k]);
+			}
+			dist = v[0] * v[0] + v[1] * v[1];
+			if (yawradius < dist)
+				yawradius = dist;
+			dist += v[2] * v[2];
+			if (radius < dist)
+				radius = dist;
+		}
+
+	//rbounds will be used when entity has nonzero pitch or roll
+	radius = sqrt(radius);
+	loadmodel->rmins[0] = loadmodel->rmins[1] = loadmodel->rmins[2] = -radius;
+	loadmodel->rmaxs[0] = loadmodel->rmaxs[1] = loadmodel->rmaxs[2] = radius;
+
+	//ybounds will be used when entity has nonzero yaw
+	yawradius = sqrt(yawradius);
+	loadmodel->ymins[0] = loadmodel->ymins[1] = -yawradius;
+	loadmodel->ymaxs[0] = loadmodel->ymaxs[1] = yawradius;
+	loadmodel->ymins[2] = loadmodel->mins[2];
+	loadmodel->ymaxs[2] = loadmodel->maxs[2];
+}
+
 static qboolean nameInList(const char *list, const char *name)
 {
 	const char *s;
@@ -2486,7 +2542,12 @@ void Mod_LoadAliasModel (model_t *mod, void *buffer)
 		mod->modhint = MOD_EYES;
 	else if (!strcmp(mod->name, "progs/flame0.mdl") ||
 		 !strcmp(mod->name, "progs/flame.mdl") ||
-		 !strcmp(mod->name, "progs/flame2.mdl"))
+		 !strcmp(mod->name, "progs/flame2.mdl") ||
+		 !strcmp(mod->name, "progs/misc_flame_big.mdl") ||	//
+		 !strcmp(mod->name, "progs/misc_flame_med.mdl") ||	//
+		 !strcmp(mod->name, "progs/misc_longtrch.mdl") ||	// AD flames, torches
+		 !strcmp(mod->name, "progs/misc_braztall.mdl") ||	//
+		 !strcmp(mod->name, "progs/misc_brazshrt.mdl"))		//
 		mod->modhint = MOD_FLAME;
 	else if (!strcmp(mod->name, "progs/bolt.mdl") ||
 		 !strcmp(mod->name, "progs/bolt2.mdl") ||
@@ -2630,13 +2691,7 @@ void Mod_LoadAliasModel (model_t *mod, void *buffer)
 
 	Mod_SetExtraFlags(mod); //johnfitz
 
-	for (i = 0 ; i < 3 ; i++)
-	{
-		mod->mins[i] = aliasbboxmins[i] * pheader->scale[i] + pheader->scale_origin[i];
-		mod->maxs[i] = aliasbboxmaxs[i] * pheader->scale[i] + pheader->scale_origin[i];
-	}
-
-	mod->radius = RadiusFromBounds(mod->mins, mod->maxs);
+	Mod_CalcAliasBounds(pheader); //johnfitz
 
 // build the draw lists
 	GL_MakeAliasModelDisplayLists (mod, pheader);
@@ -3415,4 +3470,21 @@ Mod_IsPlayerModel
 qboolean Mod_IsAnyKindOfPlayerModel(model_t *mod)
 {
 	return mod ? mod->modhint == MOD_PLAYER || mod->modhint == MOD_PLAYER_DME : false;
+}
+
+qboolean Mod_IsMonsterModel(int modelindex)
+{
+	return modelindex == cl_modelindex[mi_fish] ||
+		modelindex == cl_modelindex[mi_dog] ||
+		modelindex == cl_modelindex[mi_soldier] ||
+		modelindex == cl_modelindex[mi_enforcer] ||
+		modelindex == cl_modelindex[mi_knight] ||
+		modelindex == cl_modelindex[mi_hknight] ||
+		modelindex == cl_modelindex[mi_scrag] ||
+		modelindex == cl_modelindex[mi_ogre] ||
+		modelindex == cl_modelindex[mi_fiend] ||
+		modelindex == cl_modelindex[mi_vore] ||
+		modelindex == cl_modelindex[mi_shambler] ||
+		modelindex == cl_modelindex[mi_zombie] ||
+		modelindex == cl_modelindex[mi_spawn];
 }

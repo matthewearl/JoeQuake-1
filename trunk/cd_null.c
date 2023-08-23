@@ -1,5 +1,5 @@
 /*
-Copyright (C) 2022 Matthew Earl
+Copyright (C) 1996-1997 Id Software, Inc.
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
@@ -8,36 +8,53 @@ of the License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  
 
 See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+
 */
+#include "quakedef.h"
 
 
-#ifndef __CL_GHOST_H
-#define __CL_GHOST_H
+extern	cvar_t	bgmvolume;
 
-#define GHOST_MAX_CLIENTS   8
-
-void Ghost_Load (const char *map_name);
-void Ghost_Draw (void);
-void Ghost_DrawGhostTime (qboolean intermission);
-void Ghost_Init (void);
-void Ghost_Finish (void);
-void Ghost_Shutdown (void);
-
-typedef struct {
-    byte colors;
-    byte translations[VID_GRADES*256];
-} ghost_color_info_t;
-
-extern char         ghost_demo_path[MAX_OSPATH];
-extern entity_t		*ghost_entity;
-extern ghost_color_info_t ghost_color_info[GHOST_MAX_CLIENTS];
+void CDAudio_Play(byte track, qboolean looping)
+{
+}
 
 
-#endif /* __CL_GHOST_H */
+void CDAudio_Stop(void)
+{
+}
+
+
+void CDAudio_Pause(void)
+{
+}
+
+
+void CDAudio_Resume(void)
+{
+}
+
+
+void CDAudio_Update(void)
+{
+	if (fmod_loaded)
+		FMOD_ChangeVolume(bgmvolume.value);
+}
+
+
+int CDAudio_Init(void)
+{
+	return 0;
+}
+
+
+void CDAudio_Shutdown(void)
+{
+}

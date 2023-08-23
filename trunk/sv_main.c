@@ -34,7 +34,40 @@ int			sv_protocol = PROTOCOL_NETQUAKE;
 
 extern qboolean	pr_alpha_supported; //johnfitz 
 
+vec3_t		sv_velocity;	//joe: for more accurate player speed value
+
 //============================================================================
+
+/*
+===============
+SV_Protocol_f
+===============
+*/
+void SV_Protocol_f(void)
+{
+	int i;
+
+	switch (Cmd_Argc())
+	{
+	case 1:
+		Con_Printf("\"sv_protocol\" is \"%i\"\n", sv_protocol);
+		break;
+	case 2:
+		i = atoi(Cmd_Argv(1));
+		if (i != PROTOCOL_NETQUAKE && i != PROTOCOL_FITZQUAKE && i != PROTOCOL_RMQ)
+			Con_Printf("sv_protocol must be %i or %i or %i\n", PROTOCOL_NETQUAKE, PROTOCOL_FITZQUAKE, PROTOCOL_RMQ);
+		else
+		{
+			sv_protocol = i;
+			if (sv.active)
+				Con_Printf("changes will not take effect until the next level load.\n");
+		}
+		break;
+	default:
+		Con_Printf("Usage: %s [protocol]\n", Cmd_Argv(0));
+		break;
+	}
+}
 
 /*
 ===============
@@ -46,6 +79,7 @@ void SV_Init (void)
 	int	i;
 	const char *p;
 	extern cvar_t sv_altnoclip; //johnfitz
+	extern cvar_t sv_noclipspeed;
 
 	sv.edicts = NULL; // ericw -- sv.edicts switched to use malloc() 
 
@@ -60,35 +94,31 @@ void SV_Init (void)
 	Cvar_Register (&sv_aim);
 	Cvar_Register (&sv_nostep);
 	Cvar_Register (&sv_altnoclip); //johnfitz
+	Cvar_Register (&sv_noclipspeed);
+
+	Cmd_AddCommand("sv_protocol", &SV_Protocol_f); //johnfitz
 
 	for (i=0 ; i<MAX_MODELS ; i++)
 		sprintf (localmodels[i], "*%i", i);
 
 	i = COM_CheckParm("-protocol");
 	if (i && i < com_argc - 1)
-	{
 		sv_protocol = atoi(com_argv[i + 1]);
-		switch (sv_protocol)
-		{
-		case PROTOCOL_NETQUAKE:
-			p = "NetQuake";
-			break;
-		case PROTOCOL_FITZQUAKE:
-			p = "FitzQuake";
-			break;
-		case PROTOCOL_RMQ:
-			p = "RMQ";
-			break;
-		default:
-			Sys_Error("Bad protocol version request %i. Accepted values: %i, %i, %i.",
-				sv_protocol, PROTOCOL_NETQUAKE, PROTOCOL_FITZQUAKE, PROTOCOL_RMQ);
-			return; /* silence compiler */
-		}
-	}
-	else
+	switch (sv_protocol)
 	{
-		sv_protocol = PROTOCOL_NETQUAKE;
+	case PROTOCOL_NETQUAKE:
 		p = "NetQuake";
+		break;
+	case PROTOCOL_FITZQUAKE:
+		p = "FitzQuake";
+		break;
+	case PROTOCOL_RMQ:
+		p = "RMQ";
+		break;
+	default:
+		Sys_Error("Bad protocol version request %i. Accepted values: %i, %i, %i.",
+			sv_protocol, PROTOCOL_NETQUAKE, PROTOCOL_FITZQUAKE, PROTOCOL_RMQ);
+		return; /* silence compiler */
 	}
 	Sys_Printf("Server using protocol %i (%s)\n", sv_protocol, p);
 }
@@ -575,7 +605,8 @@ void SV_WriteEntitiesToClient (edict_t *clent, sizebuf_t *msg, qboolean nomap)
 
 		//johnfitz -- max size for protocol 15 is 18 bytes, not 16 as originally
 		//assumed here.  And, for protocol 85 the max size is actually 24 bytes.
-		if (msg->cursize + 24 > msg->maxsize)
+		// For float coords and angles the limit is 40.
+		if (msg->cursize + 40 > msg->maxsize)
 		{
 			Con_Printf("Packet overflow!\n");
 			return;
@@ -632,6 +663,12 @@ void SV_WriteEntitiesToClient (edict_t *clent, sizebuf_t *msg, qboolean nomap)
 			continue;
 		//johnfitz
 
+		val = GETEDICTFIELDVALUE(ent, eval_scale);
+		if (val)
+			ent->scale = ENTSCALE_ENCODE(val->_float);
+		else
+			ent->scale = ENTSCALE_DEFAULT;
+
 		if (sv.protocol == PROTOCOL_NETQUAKE)
 		{
 #ifdef GLQUAKE
@@ -649,6 +686,9 @@ void SV_WriteEntitiesToClient (edict_t *clent, sizebuf_t *msg, qboolean nomap)
 		{
 			if (ent->baseline.alpha != ent->alpha)
 				bits |= U_ALPHA;
+
+			if (ent->baseline.scale != ent->scale) 
+				bits |= U_SCALE;
 
 			if (bits & U_FRAME && (int)ent->v.frame & 0xFF00)
 				bits |= U_FRAME2;
@@ -732,6 +772,8 @@ void SV_WriteEntitiesToClient (edict_t *clent, sizebuf_t *msg, qboolean nomap)
 		//johnfitz -- PROTOCOL_FITZQUAKE
 		if (bits & U_ALPHA)
 			MSG_WriteByte(msg, ent->alpha);
+		if (bits & U_SCALE)
+			MSG_WriteByte(msg, ent->scale);
 		if (bits & U_FRAME2)
 			MSG_WriteByte(msg, (int)ent->v.frame >> 8);
 		if (bits & U_MODEL2)
@@ -949,6 +991,9 @@ void SV_WriteClientdataToMessage (edict_t *ent, sizebuf_t *msg)
 	if (bits & SU_WEAPONALPHA)
 		MSG_WriteByte(msg, ent->alpha); //for now, weaponalpha = client entity alpha
 	//johnfitz
+
+	//joe: for more accurate player speed value
+	VectorCopy(ent->v.velocity, sv_velocity);
 }
 
 /*
@@ -1207,12 +1252,14 @@ void SV_CreateBaseline (void)
 			svent->baseline.colormap = entnum;
 			svent->baseline.modelindex = SV_ModelIndex ("progs/player.mdl");
 			svent->baseline.alpha = ENTALPHA_DEFAULT; //johnfitz -- alpha support 
+			svent->baseline.scale = ENTSCALE_DEFAULT;
 		}
 		else
 		{
 			svent->baseline.colormap = 0;
 			svent->baseline.modelindex = SV_ModelIndex (PR_GetString(svent->v.model));
 			svent->baseline.alpha = svent->alpha; //johnfitz -- alpha support
+			svent->baseline.scale = ENTSCALE_DEFAULT;
 		}
 
 		//johnfitz -- PROTOCOL_FITZQUAKE
@@ -1224,6 +1271,7 @@ void SV_CreateBaseline (void)
 			if (svent->baseline.frame & 0xFF00)
 				svent->baseline.frame = 0;
 			svent->baseline.alpha = ENTALPHA_DEFAULT;
+			svent->baseline.scale = ENTSCALE_DEFAULT;
 		}
 		else //decide which extra data needs to be sent
 		{
@@ -1233,6 +1281,8 @@ void SV_CreateBaseline (void)
 				bits |= B_LARGEFRAME;
 			if (svent->baseline.alpha != ENTALPHA_DEFAULT)
 				bits |= B_ALPHA;
+			if (svent->baseline.scale != ENTSCALE_DEFAULT)
+				bits |= B_SCALE;
 		}
 		//johnfitz
 
@@ -1271,6 +1321,9 @@ void SV_CreateBaseline (void)
 		if (bits & B_ALPHA)
 			MSG_WriteByte(&sv.signon, svent->baseline.alpha);
 		//johnfitz
+
+		if (bits & B_SCALE)
+			MSG_WriteByte(&sv.signon, svent->baseline.scale);
 	}
 }
 

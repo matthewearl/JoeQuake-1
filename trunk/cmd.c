@@ -1050,7 +1050,7 @@ static void AddNewEntry (char *fname, int ftype, long fsize)
 	for (i=num_files ; i>pos ; i--)
 		filelist[i] = filelist[i-1];
 
-        filelist[i].name = Q_strdup (fname);
+    filelist[i].name = Q_strdup (fname);
 	filelist[i].type = ftype;
 	filelist[i].size = fsize;
 
@@ -1065,7 +1065,7 @@ static void AddNewEntry_unsorted (char *fname, int ftype, long fsize)
 	toLower (fname);
 	// else don't convert, linux is case sensitive
 #endif
-        filelist[num_files].name = Q_strdup (fname);
+    filelist[num_files].name = Q_strdup (fname);
 	filelist[num_files].type = ftype;
 	filelist[num_files].size = fsize;
 
@@ -1089,6 +1089,21 @@ static qboolean CheckEntryName (char *ename)
 	for (i=0 ; i<num_files ; i++)
 		if (!Q_strcasecmp(ename, filelist[i].name))
 			return true;
+
+	return false;
+}
+
+qboolean IsBSPTooSmall(int bsplength)
+{
+	return bsplength <= (32 * 1024);
+}
+
+qboolean CheckRealBSP(char* bspname, int bsplength)
+{
+	if (!IsBSPTooSmall(bsplength) &&		// don't list files under 32k (ammo boxes etc)
+		!strncmp(bspname, "maps/", 5) &&	// don't list files outside of maps/
+		!strchr(bspname + 5, '/'))			// don't list files in subdirectories
+		return true;
 
 	return false;
 }
@@ -1173,6 +1188,9 @@ void ReadDir (char *path, char *the_arg)
 
 			fdtype = 0;
 			fdsize = fd.nFileSizeLow;
+			if (!Q_strcasecmp(ext, "bsp") && IsBSPTooSmall(fdsize))
+				continue;
+
 			if (Q_strcasecmp(ext, "dz") && RDFlags & (RD_STRIPEXT | RD_MENU_DEMOS))
 			{
 				COM_StripExtension (fd.cFileName, filename);
@@ -1267,16 +1285,6 @@ end:
 	RDFlags = 0;
 }
 
-qboolean CheckRealBSP (char *bspname, int bsplength)
-{
-	if (bsplength > 32 * 1024 &&			// don't list files under 32k (ammo boxes etc)
-		!strncmp(bspname, "maps/", 5) &&	// don't list files outside of maps/
-		!strchr(bspname + 5, '/'))			// don't list files in subdirectories
-		return true;
-
-	return false;
-}
-
 int	pak_files = 0;
 
 /*
@@ -1331,7 +1339,7 @@ void FindFilesInPak (char *the_arg)
 						if (CheckEntryName(filename))
 							continue;
 
-						AddNewEntry_unsorted (filename, 0, l);
+						AddNewEntry(filename, 0, l);
 						pak_files++;
 					}
 				}

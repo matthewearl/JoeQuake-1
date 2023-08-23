@@ -70,7 +70,7 @@ void VID_UnlockBuffer (void);
 #define	DIST_EPSILON	(0.03125)	// 1/32 epsilon to keep floating point happy (moved from world.c)
 
 #define	MAX_MSGLEN		64000		// max length of a reliable message
-#define	MAX_DATAGRAM	32000		// max length of unreliable message
+#define	MAX_DATAGRAM	64000		// max length of unreliable message
 
 #define DATAGRAM_MTU	1400	// johnfitz -- actual limit for unreliable messages to nonlocal clients
 
@@ -192,6 +192,7 @@ typedef struct
 	unsigned char 	colormap;	//johnfitz -- was int
 	unsigned char 	skin;		//johnfitz -- was int
 	unsigned char	alpha;		//johnfitz -- added
+	unsigned char	scale;
 	int		effects;
 } entity_state_t;
 

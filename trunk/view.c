@@ -1048,6 +1048,7 @@ void V_AddViewWeapon (float bob)
 	view->model = cl.model_precache[cl.stats[STAT_WEAPON]];
 	view->frame = cl.stats[STAT_WEAPONFRAME];
 	view->colormap = vid.colormap;
+	view->scale = ENTSCALE_DEFAULT;
 }
 
 /*
@@ -1089,6 +1090,8 @@ void V_CalcRefdef (void)
 	vec3_t		forward;
 	float		bob;
 	extern cvar_t r_drawviewmodel;
+	extern cvar_t cl_maxpitch;
+	extern cvar_t cl_minpitch;
 
 	V_DriftPitch ();
 
@@ -1144,6 +1147,12 @@ void V_CalcRefdef (void)
 
 	if (cl_thirdperson.value)
 		Chase_Update ();
+
+// bound minpitch/maxpitch
+	if (cl_minpitch.value < -90)
+		Cvar_SetValue(&cl_minpitch, -90);
+	if (cl_maxpitch.value > 90)
+		Cvar_SetValue(&cl_maxpitch, 90);
 }
 
 char *LocalTime (char *format)
@@ -1227,6 +1236,7 @@ void SCR_DrawSpeed (void)
 	char		st[8];
 	float		speed, vspeed, speedunits, scale, alpha;
 	vec3_t		vel;
+	extern	vec3_t	sv_velocity;
 	static	float	maxspeed = 0, display_speed = -1;
 	static	double	lastrealtime = 0;
 
@@ -1240,7 +1250,10 @@ void SCR_DrawSpeed (void)
 		maxspeed = 0;
 	}
 
-	VectorCopy (cl.velocity, vel);
+	if (cls.demoplayback || coop.value)
+		VectorCopy(cl.velocity, vel);
+	else
+		VectorCopy (sv_velocity, vel);
 	vspeed = vel[2];
 	vel[2] = 0;
 	speed = VectorLength (vel);
