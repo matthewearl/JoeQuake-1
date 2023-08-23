@@ -1,3 +1,9 @@
+find_package(SDL2 REQUIRED)
+
+if (SDL2_FOUND)
+  include_directories(${SDL2_INCLUDE_DIRS})
+endif()
+
 add_library(joequake_minizip
     ioapi.c
     ioapi.h
@@ -59,6 +65,7 @@ add_executable(joequake-gl
     host_cmd.c
     image.c
     image.h
+    in_sdl.c
     input.h
     iplog.c
     iplog.h
@@ -100,7 +107,7 @@ add_executable(joequake-gl
     security.h
     server.h
     snd_dma.c
-    snd_linux.c
+    snd_sdl.c
     snd_mem.c
     snd_mix.c
     sound.h
@@ -115,7 +122,7 @@ add_executable(joequake-gl
     version.h
     vid.h
     vid_common_gl.c
-    vid_glx.c
+    vid_sdl.c
     view.c
     view.h
     wad.c
@@ -134,8 +141,8 @@ add_executable(joequake-gl
 )
 
 target_compile_definitions(joequake-gl
-    PRIVATE GLQUAKE
+    PRIVATE GLQUAKE SDL2
 )
 target_link_libraries(joequake-gl
-    PRIVATE GL dl m png jpeg X11 Xxf86vm Xxf86dga SDL2 joequake_minizip
+    PRIVATE GL dl m png jpeg SDL2 joequake_minizip
 )
