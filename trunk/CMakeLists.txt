@@ -1,3 +1,5 @@
+set(CMAKE_C_STANDARD 99)
+
 find_package(SDL2 REQUIRED)
 
 if (SDL2_FOUND)
@@ -144,5 +146,5 @@ target_compile_definitions(joequake-gl
     PRIVATE GLQUAKE SDL2
 )
 target_link_libraries(joequake-gl
-    PRIVATE GL dl m png jpeg SDL2 joequake_minizip
+    PRIVATE joequake_minizip png jpeg GL m dl ${SDL2_LIBRARIES}
 )
