@@ -261,8 +261,6 @@ extern	int		mirrortexturenum;	// quake texturenum, not gltexturenum
 extern	qboolean	mirror;
 extern	mplane_t	*mirror_plane;
 
-extern	float		r_world_matrix[16];
-
 extern	const	char	*gl_vendor;
 extern	const	char	*gl_renderer;
 extern	const	char	*gl_version;
@@ -276,6 +274,12 @@ typedef void (APIENTRY *lpGenerateMipmapFUNC)(GLenum);
 // Multitexture
 typedef void (APIENTRY *lpMTexFUNC)(GLenum, GLfloat, GLfloat);
 typedef void (APIENTRY *lpSelTexFUNC)(GLenum);
+
+//johnfitz -- anisotropic filtering
+#define	GL_TEXTURE_MAX_ANISOTROPY_EXT		0x84FE
+#define	GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT	0x84FF
+extern	float		gl_max_anisotropy;
+extern	qboolean	gl_anisotropy_able;
 
 // VBO
 typedef void (APIENTRY *lpBindBufFUNC)(GLenum, GLuint);
@@ -358,6 +362,7 @@ extern int gl_textureunits;
 extern qboolean	gl_vbo_able;
 extern qboolean	gl_glsl_able;
 extern qboolean gl_glsl_gamma_able;
+extern qboolean gl_glsl_alias_able;
 
 typedef struct glsl_attrib_binding_s {
 	const char *name;

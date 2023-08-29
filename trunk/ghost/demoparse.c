@@ -749,6 +749,18 @@ DP_ParseStuffText(ctx_t *ctx)
 
 
 static dp_err_t
+DP_ParsePrint(ctx_t *ctx)
+{
+    char string[2048];
+
+    CHECK_RC(DP_ParseString(ctx, string, sizeof(string), NULL));
+    CALL_CALLBACK(print, string);
+
+    return DP_ERR_SUCCESS;
+}
+
+
+static dp_err_t
 DP_UpdateColors(ctx_t* ctx)
 {
     byte client_num, colors;
@@ -786,6 +798,8 @@ DP_ParseMessage(ctx_t *ctx)
                 CHECK_RC(DP_ParseVersion(ctx));
                 break;
             case svc_print:
+                CHECK_RC(DP_ParsePrint(ctx));
+                break;
             case svc_centerprint:
             case svc_skybox:
                 CHECK_RC(DP_ParseString(ctx, NULL, 0, NULL));
@@ -985,6 +999,21 @@ DP_ReadDemo_NoHandle(ctx_t *ctx)
 static const char *dp_err_strings[] = {
     DP_FOREACH_ERR(DP_GENERATE_STRING)
 };
+
+
+const char *
+DP_StrError(dp_err_t rc)
+{
+    static char buf[512];
+
+    if (rc < 0 || rc >= sizeof(dp_err_strings) / sizeof(char *)) {
+        Q_snprintfz(buf, sizeof(buf), "Unknown error (%d)", rc);
+    } else {
+        Q_snprintfz(buf, sizeof(buf), "%s (%d)", dp_err_strings[rc], rc);
+    }
+
+    return buf;
+}
 
 
 dp_err_t

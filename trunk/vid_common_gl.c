@@ -37,9 +37,12 @@ const	char	*gl_extensions;
 
 qboolean	gl_mtexable = false;
 int			gl_textureunits = 1;
+qboolean	gl_anisotropy_able = false; //johnfitz
+float		gl_max_anisotropy; //johnfitz
 qboolean	gl_vbo_able = false;
 qboolean	gl_glsl_able = false;
 qboolean	gl_glsl_gamma_able = false;
+qboolean	gl_glsl_alias_able = false; //ericw
 
 lpGenerateMipmapFUNC qglGenerateMipmap = NULL;
 
@@ -154,6 +157,48 @@ void CheckMultiTextureExtensions (void)
 		Con_Printf ("Enabled %i texture units on hardware\n", gl_textureunits);
 }
 
+void CheckAnisotropicFilteringExtensions(void)
+{
+	if (CheckExtension("GL_EXT_texture_filter_anisotropic"))
+	{
+		float test1, test2;
+		GLuint tex;
+
+		// test to make sure we really have control over it
+		// 1.0 and 2.0 should always be legal values
+		glGenTextures(1, &tex);
+		glBindTexture(GL_TEXTURE_2D, tex);
+		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, 1.0f);
+		glGetTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, &test1);
+		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, 2.0f);
+		glGetTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, &test2);
+		glDeleteTextures(1, &tex);
+
+		if (test1 == 1 && test2 == 2)
+		{
+			Con_Printf("Anisotropic filter extensions found\n");
+			gl_anisotropy_able = true;
+		}
+		else
+		{
+			Con_Printf("Anisotropic filtering locked by driver. Current driver setting is %.0f\n", test1);
+		}
+
+		//get max value either way, so the menu and stuff know it
+		glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &gl_max_anisotropy);
+		if (gl_max_anisotropy < 2)
+		{
+			gl_anisotropy_able = false;
+			gl_max_anisotropy = 1;
+			Con_Printf("Anisotropic filtering broken: disabled\n");
+		}
+	}
+	else
+	{
+		gl_max_anisotropy = 1;
+	}
+}
+
 void CheckVertexBufferExtensions(void)
 {
 	if (!COM_CheckParm("-novbo") && 
@@ -241,6 +286,10 @@ void CheckGLSLExtensions(void)
 	// GLSL gamma
 	if (!COM_CheckParm("-noglslgamma") && gl_glsl_able)
 		gl_glsl_gamma_able = true;
+
+	// GLSL alias model rendering
+	if (!COM_CheckParm("-noglslalias") && gl_glsl_able && gl_vbo_able && gl_textureunits >= 4)
+		gl_glsl_alias_able = true;
 }
 
 /*
@@ -296,6 +345,7 @@ void GL_Init (void)
 	gl_add_ext = CheckExtension("GL_ARB_texture_env_add");
 	CheckGenerateMipmapExtension();
 	CheckMultiTextureExtensions ();
+	CheckAnisotropicFilteringExtensions();
 	CheckVertexBufferExtensions();
 	CheckGLSLExtensions();
 
@@ -361,9 +411,9 @@ void VID_SetPalette (unsigned char *palette)
 	table = d_8to24table2;
 	for (i = 0 ; i < 256 ; i++)
 	{
-		r = min(pal[0] * (2.0 / 1.5), 255);
-		g = min(pal[1] * (2.0 / 1.5), 255);
-		b = min(pal[2] * (2.0 / 1.5), 255);
+		r = min(pal[0] * 2.0, 255);
+		g = min(pal[1] * 2.0, 255);
+		b = min(pal[2] * 2.0, 255);
 		pal += 3;
 		*table++ = (255<<24) + (r<<0) + (g<<8) + (b<<16);
 	}

@@ -429,6 +429,21 @@
     <ClCompile Include="cl_dzip.c">
       <Filter>Source Files\Client</Filter>
     </ClCompile>
+    <ClCompile Include="snd_sdl.c">
+      <Filter>Source Files\Sound</Filter>
+    </ClCompile>
+    <ClCompile Include="vid_sdl.c">
+      <Filter>Source Files\Video</Filter>
+    </ClCompile>
+    <ClCompile Include="cd_null.c">
+      <Filter>Source Files\Sound</Filter>
+    </ClCompile>
+    <ClCompile Include="in_sdl.c">
+      <Filter>Source Files\Input</Filter>
+    </ClCompile>
+    <ClCompile Include="ghost\demosummary.c">
+      <Filter>Source Files\Ghost</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="adivtab.h">
@@ -615,6 +630,9 @@
       <Filter>Header Files\Ghost_h</Filter>
     </ClInclude>
     <ClInclude Include="ghost\ghost_private.h">
+      <Filter>Header Files\Ghost_h</Filter>
+    </ClInclude>
+    <ClInclude Include="ghost\demosummary.h">
       <Filter>Header Files\Ghost_h</Filter>
     </ClInclude>
   </ItemGroup>

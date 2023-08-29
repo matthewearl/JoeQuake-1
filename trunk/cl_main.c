@@ -33,6 +33,7 @@ cvar_t	cl_nolerp = {"cl_nolerp", "0"};
 
 cvar_t	cl_truelightning = {"cl_truelightning", "0"};
 cvar_t	cl_sbar = {"cl_sbar", "0", CVAR_ARCHIVE};
+cvar_t	cl_sbar_offset = { "cl_sbar_offset", "0" };
 cvar_t	cl_rocket2grenade = {"cl_r2g", "0"};
 cvar_t	cl_mapname = {"mapname", "", CVAR_ROM};
 cvar_t	cl_muzzleflash = {"cl_muzzleflash", "1"};
@@ -176,6 +177,8 @@ This is also called on Host_Error, so it shouldn't cause any errors
 */
 void CL_Disconnect (void)
 {
+	qboolean was_loopback;
+
 // stop sounds (especially looping!)
 	S_StopAllSounds (true);
 	
@@ -201,11 +204,27 @@ void CL_Disconnect (void)
 		MSG_WriteByte (&cls.message, clc_disconnect);
 		NET_SendUnreliableMessage (cls.netcon, &cls.message);
 		SZ_Clear (&cls.message);
+		was_loopback = (cls.netcon && !cls.netcon->disconnected && cls.netcon->driver == 0);
 		NET_Close (cls.netcon);
 
 		cls.state = ca_disconnected;
 		if (sv.active)
+		{
+			if (was_loopback
+				&& svs.clients->active
+				&& svs.clients->netconnection
+				&& svs.clients->netconnection->driver == 0)
+			{
+				// If this is a loopback connection and there is data ready to
+				// be sent to the client, then the data will never be sent since
+				// we just closed the socket (`NET_Close` above), and therefore
+				// `Host_ShutdownServer` will always hang for three seconds.
+				//
+				// Avoid this by just discarding the pending message.
+				SZ_Clear (&svs.clients->message);
+			}
 			Host_ShutdownServer (false);
+		}
 	}
 
 	cls.demoplayback = cls.timedemo = false;
@@ -1399,6 +1418,7 @@ void CL_Init (void)
 
 	Cvar_Register (&cl_truelightning);
 	Cvar_Register (&cl_sbar);
+	Cvar_Register (&cl_sbar_offset);
 	Cvar_Register (&cl_rocket2grenade);
 	Cvar_Register (&cl_mapname);
 	Cvar_Register (&cl_muzzleflash);
