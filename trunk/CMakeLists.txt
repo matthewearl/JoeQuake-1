@@ -140,6 +140,8 @@ add_executable(joequake-gl
     ghost/ghost.h
     ghost/ghost_private.h
     ghost/ghostparse.c
+    ghost/demosummary.c
+    ghost/demosummary.h
 )
 
 target_compile_definitions(joequake-gl
