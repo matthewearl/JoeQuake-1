@@ -42,6 +42,7 @@ float		gl_max_anisotropy; //johnfitz
 qboolean	gl_vbo_able = false;
 qboolean	gl_glsl_able = false;
 qboolean	gl_glsl_gamma_able = false;
+qboolean	gl_glsl_alias_able = false; //ericw
 
 lpGenerateMipmapFUNC qglGenerateMipmap = NULL;
 
@@ -285,6 +286,10 @@ void CheckGLSLExtensions(void)
 	// GLSL gamma
 	if (!COM_CheckParm("-noglslgamma") && gl_glsl_able)
 		gl_glsl_gamma_able = true;
+
+	// GLSL alias model rendering
+	if (!COM_CheckParm("-noglslalias") && gl_glsl_able && gl_vbo_able && gl_textureunits >= 4)
+		gl_glsl_alias_able = true;
 }
 
 /*
@@ -406,9 +411,9 @@ void VID_SetPalette (unsigned char *palette)
 	table = d_8to24table2;
 	for (i = 0 ; i < 256 ; i++)
 	{
-		r = min(pal[0] * (2.0 / 1.5), 255);
-		g = min(pal[1] * (2.0 / 1.5), 255);
-		b = min(pal[2] * (2.0 / 1.5), 255);
+		r = min(pal[0] * 2.0, 255);
+		g = min(pal[1] * 2.0, 255);
+		b = min(pal[2] * 2.0, 255);
 		pal += 3;
 		*table++ = (255<<24) + (r<<0) + (g<<8) + (b<<16);
 	}

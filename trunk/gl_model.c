@@ -579,7 +579,11 @@ void Mod_LoadTextures (lump_t *l)
 
 		if (!Mod_LoadBrushModelTexture(tx, texture_flag))
 		{
-			tx->gl_texturenum = GL_LoadTexture(va("%s:%s", bspname, tx2->name), tx2->width, tx2->height, data, texture_flag | brighten_flag, 1);
+			if (ISTURBTEX(tx->name))	//joe: do not brighten turbulent textures
+				tx->gl_texturenum = GL_LoadTexture(va("%s:%s", bspname, tx2->name), tx2->width, tx2->height, data, texture_flag, 1);
+			else
+				tx->gl_texturenum = GL_LoadTexture(va("%s:%s", bspname, tx2->name), tx2->width, tx2->height, data, texture_flag | brighten_flag, 1);
+
 			if (!ISTURBTEX(tx->name) && Img_HasFullbrights(data, tx2->width * tx2->height))
 				tx->fb_texturenum = GL_LoadTexture(va("%s:@fb_%s", bspname, tx2->name), tx2->width, tx2->height, data, texture_flag | TEX_FULLBRIGHT, 1);
 		}
@@ -2281,7 +2285,7 @@ Mod_LoadAllSkins
 */
 void *Mod_LoadAllSkins (int numskins, daliasskintype_t *pskintype)
 {
-	int			i, j, k, size, groupskins, gl_texnum, fb_texnum, texture_flag;
+	int			i, j, k, size, groupskins, gl_texnum, fb_texnum, texture_flag, brighten_flag;
 	char		basename[64], identifier[64];
 	byte		*skin, *texels;
 	daliasskingroup_t *pinskingroup;
@@ -2296,6 +2300,7 @@ void *Mod_LoadAllSkins (int numskins, daliasskintype_t *pskintype)
 
 	COM_StripExtension (COM_SkipFirstSubfolder(loadmodel->name), basename);
 
+	brighten_flag = (lightmode == 2) ? TEX_BRIGHTEN : 0;
 	texture_flag = TEX_MIPMAP;
 	if (loadmodel->flags & MF_HOLEY)
 		texture_flag |= TEX_ALPHA;
@@ -2343,7 +2348,7 @@ void *Mod_LoadAllSkins (int numskins, daliasskintype_t *pskintype)
 
 			if (!gl_texnum)
 			{
-				gl_texnum = GL_LoadTexture (identifier, pheader->skinwidth, pheader->skinheight, (byte *)(pskintype + 1), texture_flag, 1);
+				gl_texnum = GL_LoadTexture (identifier, pheader->skinwidth, pheader->skinheight, (byte *)(pskintype + 1), texture_flag | brighten_flag, 1);
 
 				if (Img_HasFullbrights((byte *)(pskintype + 1),	pheader->skinwidth * pheader->skinheight))
 					fb_texnum = GL_LoadTexture (va("@fb_%s", identifier), pheader->skinwidth, pheader->skinheight, (byte *)(pskintype + 1), texture_flag | TEX_FULLBRIGHT, 1);
@@ -2384,7 +2389,7 @@ void *Mod_LoadAllSkins (int numskins, daliasskintype_t *pskintype)
 
 				if (!gl_texnum)
 				{
-					gl_texnum = GL_LoadTexture (identifier, pheader->skinwidth, pheader->skinheight, (byte *)pskintype, texture_flag, 1);
+					gl_texnum = GL_LoadTexture (identifier, pheader->skinwidth, pheader->skinheight, (byte *)pskintype, texture_flag | brighten_flag, 1);
 
 					if (Img_HasFullbrights((byte *)pskintype, pheader->skinwidth * pheader->skinheight))
 						fb_texnum = GL_LoadTexture (va("@fb_%s", identifier), pheader->skinwidth, pheader->skinheight, (byte *)pskintype, texture_flag | TEX_FULLBRIGHT, 1);

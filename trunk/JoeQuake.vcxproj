@@ -282,7 +282,7 @@
     <Link>
       <AdditionalOptions>/MACHINE:I386 %(AdditionalOptions)</AdditionalOptions>
       <AdditionalDependencies>.\dxsdk\lib\dxguid.lib;opengl32.lib;wsock32.lib;winmm.lib;libpng.lib;libjpeg.lib;zlib.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <OutputFile>.\..\..\..\..\joequake-gl.exe</OutputFile>
+      <OutputFile>.\..\..\TEST\joequake-gl.exe</OutputFile>
       <Version>
       </Version>
       <SuppressStartupBanner>true</SuppressStartupBanner>
@@ -334,7 +334,7 @@
     <Link>
       <AdditionalOptions>/MACHINE:I386 %(AdditionalOptions)</AdditionalOptions>
       <AdditionalDependencies>.\dxsdk\lib\dxguid.lib;opengl32.lib;wsock32.lib;winmm.lib;libpng.lib;libjpeg.lib;zlib.lib;SDL2.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <OutputFile>.\..\..\..\..\joequake-gl-sdl.exe</OutputFile>
+      <OutputFile>.\..\..\TEST\joequake-gl-sdl.exe</OutputFile>
       <Version>
       </Version>
       <SuppressStartupBanner>true</SuppressStartupBanner>
@@ -471,6 +471,7 @@
     <ClCompile Include="cl_dzip.c" />
     <ClCompile Include="fmod.c" />
     <ClCompile Include="ghost\demoparse.c" />
+    <ClCompile Include="ghost\demosummary.c" />
     <ClCompile Include="ghost\ghost.c" />
     <ClCompile Include="ghost\ghostparse.c" />
     <ClCompile Include="gl_decals.c">
@@ -787,6 +788,7 @@
   <ItemGroup>
     <ClInclude Include="fakegl.h" />
     <ClInclude Include="ghost\demoparse.h" />
+    <ClInclude Include="ghost\demosummary.h" />
     <ClInclude Include="ghost\ghost.h" />
     <ClInclude Include="ghost\ghost_private.h" />
     <ClInclude Include="gl_model.h" />

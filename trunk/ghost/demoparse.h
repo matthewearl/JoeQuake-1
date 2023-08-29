@@ -81,10 +81,12 @@ typedef struct {
                                     void *ctx);
     dp_cb_response_t (*stuff_text)(const char *string, void *ctx);
     dp_cb_response_t (*update_colors)(byte client_num, byte colors, void* ctx);
+    dp_cb_response_t (*print)(const char *string, void *ctx);
 } dp_callbacks_t;
 
 
 dp_err_t DP_ReadDemo(dp_callbacks_t *callbacks, void *callback_ctx);
+const char *DP_StrError(dp_err_t rc);
 
 
 #endif /* __DEMOPARSE_H */

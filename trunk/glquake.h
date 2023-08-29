@@ -261,8 +261,6 @@ extern	int		mirrortexturenum;	// quake texturenum, not gltexturenum
 extern	qboolean	mirror;
 extern	mplane_t	*mirror_plane;
 
-extern	float		r_world_matrix[16];
-
 extern	const	char	*gl_vendor;
 extern	const	char	*gl_renderer;
 extern	const	char	*gl_version;
@@ -364,6 +362,7 @@ extern int gl_textureunits;
 extern qboolean	gl_vbo_able;
 extern qboolean	gl_glsl_able;
 extern qboolean gl_glsl_gamma_able;
+extern qboolean gl_glsl_alias_able;
 
 typedef struct glsl_attrib_binding_s {
 	const char *name;
