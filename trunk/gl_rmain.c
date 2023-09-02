@@ -110,7 +110,6 @@ cvar_t	r_scale = { "r_scale", "1" };
 
 cvar_t	gl_clear = {"gl_clear", "0"};
 cvar_t	gl_cull = {"gl_cull", "1"};
-cvar_t	gl_ztrick = {"gl_ztrick", "0"};
 cvar_t	gl_smoothmodels = {"gl_smoothmodels", "1"};
 cvar_t	gl_affinemodels = {"gl_affinemodels", "0"};
 cvar_t	gl_polyblend = {"gl_polyblend", "1"};
@@ -130,8 +129,11 @@ cvar_t	gl_caustics = {"gl_caustics", "1"};
 cvar_t	gl_ringalpha = {"gl_ringalpha", "0.4"};
 cvar_t	gl_fb_bmodels = {"gl_fb_bmodels", "1"};
 cvar_t	gl_fb_models = {"gl_fb_models", "1"};
+qboolean OnChange_gl_overbright(cvar_t *var, char *string);
+cvar_t	gl_overbright = { "gl_overbright", "1", 0, OnChange_gl_overbright };
+cvar_t	gl_overbright_models = { "gl_overbright_models", "1" };
 cvar_t  gl_solidparticles = {"gl_solidparticles", "0"};
-cvar_t  gl_vertexlights = {"gl_vertexlights", "1"};
+cvar_t  gl_vertexlights = {"gl_vertexlights", "0"};
 cvar_t	gl_shownormals = {"gl_shownormals", "0"};
 cvar_t  gl_loadq3models = {"gl_loadq3models", "0"};
 cvar_t  gl_lerptextures = {"gl_lerptextures", "1"};
@@ -160,8 +162,6 @@ cvar_t	gl_decal_explosions = {"gl_decal_explosions", "0"};
 extern cvar_t r_waterquality;
 extern cvar_t r_oldwater;
 extern cvar_t r_waterwarp;
-
-int		lightmode = 2;	// 1: normal (not used), 2: overbright (always used)
 
 float	pitch_rot;
 #if 0
@@ -636,6 +636,8 @@ float	r_avertexnormal_dots[SHADEDOT_QUANT][256] =
 vec3_t	shadevector;
 float	*shadedots = r_avertexnormal_dots[0];
 
+qboolean	overbright; //johnfitz
+
 float	apitch, ayaw;
 
 static GLuint r_alias_program;
@@ -653,6 +655,7 @@ static GLuint aYawLoc;
 static GLuint texLoc;
 static GLuint fullbrightTexLoc;
 static GLuint useFullbrightTexLoc;
+static GLuint useOverbrightLoc;
 static GLuint useAlphaTestLoc;
 static GLuint useWaterFogLoc;
 
@@ -808,6 +811,7 @@ void GLAlias_CreateShaders(void)
 		"uniform sampler2D Tex;\n"
 		"uniform sampler2D FullbrightTex;\n"
 		"uniform int UseFullbrightTex;\n"
+		"uniform bool UseOverbright;\n"
 		"uniform bool UseAlphaTest;\n"
 		"uniform int UseWaterFog;\n"
 		"\n"
@@ -819,6 +823,8 @@ void GLAlias_CreateShaders(void)
 		"	if (UseAlphaTest && (result.a < 0.666))\n"
 		"		discard;\n"
 		"	result *= gl_Color;\n"
+		"	if (UseOverbright)\n"
+		"		result.rgb *= 2.0;\n"
 		"	vec4 fb = texture2D(FullbrightTex, gl_TexCoord[0].xy);\n"
 		"	if (UseFullbrightTex == 1)\n"
 		"		result = mix(result, fb, fb.a);\n"
@@ -856,6 +862,7 @@ void GLAlias_CreateShaders(void)
 		texLoc = GL_GetUniformLocation(&r_alias_program, "Tex");
 		fullbrightTexLoc = GL_GetUniformLocation(&r_alias_program, "FullbrightTex");
 		useFullbrightTexLoc = GL_GetUniformLocation(&r_alias_program, "UseFullbrightTex");
+		useOverbrightLoc = GL_GetUniformLocation(&r_alias_program, "UseOverbright");
 		useAlphaTestLoc = GL_GetUniformLocation(&r_alias_program, "UseAlphaTest");
 		useWaterFogLoc = GL_GetUniformLocation(&r_alias_program, "UseWaterFog");
 
@@ -973,6 +980,7 @@ void R_DrawAliasFrame_GLSL(int frame, aliashdr_t *paliashdr, entity_t *ent, int 
 	qglUniform1i(texLoc, 0);
 	qglUniform1i(fullbrightTexLoc, 1);
 	qglUniform1i(useFullbrightTexLoc, (fb_texture != 0) ? (islumaskin ? 2 : 1) : 0);
+	qglUniform1i(useOverbrightLoc, overbright ? 1 : 0);
 	qglUniform1i(useAlphaTestLoc, (currententity->model->flags & MF_HOLEY) ? 1 : 0);
 	qglUniform1i(useWaterFogLoc, fog_data.useWaterFog);
 
@@ -1048,11 +1056,9 @@ void R_DrawAliasOutlineFrame(int frame, aliashdr_t *paliashdr, entity_t *ent, in
 		return;
 
 
-	glCullFace(GL_BACK);
-	glPolygonMode(GL_FRONT, GL_LINE);
-
+	glCullFace(GL_FRONT);
+	glPolygonMode(GL_BACK, GL_LINE);
 	glLineWidth(line_width);
-
 	glEnable(GL_LINE_SMOOTH);
 	GL_PolygonOffset(-0.7);
 	glDisable(GL_TEXTURE_2D);
@@ -1102,9 +1108,9 @@ void R_DrawAliasOutlineFrame(int frame, aliashdr_t *paliashdr, entity_t *ent, in
 	}
 	glColor4f(1, 1, 1, 1);
 	GL_PolygonOffset(0);
-	glPolygonMode(GL_FRONT, GL_FILL);
+	glPolygonMode(GL_BACK, GL_FILL);
 	glDisable(GL_LINE_SMOOTH);
-	glCullFace(GL_FRONT);
+	glCullFace(GL_BACK);
 	glEnable(GL_TEXTURE_2D);
 }
 
@@ -1340,11 +1346,31 @@ void R_SetupLighting (entity_t *ent)
 	model_t	*clmodel = ent->model;
 	static float shadescale = 0;
 
-	if (clmodel->modhint == MOD_Q3GUNSHOT || clmodel->modhint == MOD_Q3TELEPORT || clmodel->modhint == MOD_QLTELEPORT)
+	// make thunderbolt and torches full light
+	if (clmodel->modhint == MOD_THUNDERBOLT)
+	{
+		lightcolor[0] = 210.0f;
+		lightcolor[1] = 210.0f;
+		lightcolor[2] = 210.0f;
+		overbright = false;
+		full_light = ent->noshadow = true;
+		goto end;
+	}
+	else if (clmodel->modhint == MOD_FLAME)
+	{
+		lightcolor[0] = 256.0f;
+		lightcolor[1] = 256.0f;
+		lightcolor[2] = 256.0f;
+		overbright = false;
+		full_light = ent->noshadow = true;
+		goto end;
+	}
+	else if (clmodel->modhint == MOD_Q3GUNSHOT || clmodel->modhint == MOD_Q3TELEPORT || clmodel->modhint == MOD_QLTELEPORT)
 	{
 		lightcolor[0] = 128.0f;
 		lightcolor[1] = 128.0f;
 		lightcolor[2] = 128.0f;
+		overbright = false;
 		full_light = ent->noshadow = true;
 		goto end;
 	}
@@ -1378,7 +1404,7 @@ void R_SetupLighting (entity_t *ent)
 			if (r_dynamic.value)
 			{
 				VectorCopy (bubblecolor[cl_dlights[lnum].type], dlight_color);
-				VectorMA(lightcolor, add, dlight_color, lightcolor);
+				VectorMA (lightcolor, add, dlight_color, lightcolor);
 			}
 		}
 	}
@@ -1391,16 +1417,12 @@ void R_SetupLighting (entity_t *ent)
 	}
 
 	// clamp lighting so it doesn't overbright as much
-	if (lightmode == 2)
+	if (overbright)
 	{
 		add = 288.0f / (lightcolor[0] + lightcolor[1] + lightcolor[2]);
 		if (add < 1.0f)
 			VectorScale(lightcolor, add, lightcolor);
 	}
-
-	// don't draw shadows of thunderbolt and torches
-	if (clmodel->modhint == MOD_THUNDERBOLT || clmodel->modhint == MOD_FLAME)
-		ent->noshadow = true;
 
 	// always give the gun some light
 	if (ent == &cl.viewent)
@@ -1422,9 +1444,10 @@ void R_SetupLighting (entity_t *ent)
 		// brighten player models if r_fullbrightskins is not 0
 		if (r_fullbrightskins.value)
 		{
-			lightcolor[0] = 128.0f;
-			lightcolor[1] = 128.0f;
-			lightcolor[2] = 128.0f;
+			lightcolor[0] = 176.0f;
+			lightcolor[1] = 176.0f;
+			lightcolor[2] = 176.0f;
+			overbright = false;
 			full_light = true;
 		}
 		else
@@ -1442,9 +1465,10 @@ void R_SetupLighting (entity_t *ent)
 	// brighten monster models if r_fullbrightskins is 2
 	if (Mod_IsMonsterModel(ent->modelindex) && r_fullbrightskins.value == 2)
 	{
-		lightcolor[0] = 128.0f;
-		lightcolor[1] = 128.0f;
-		lightcolor[2] = 128.0f;
+		lightcolor[0] = 176.0f;
+		lightcolor[1] = 176.0f;
+		lightcolor[2] = 176.0f;
+		overbright = false;
 		full_light = true;
 	}
 
@@ -1552,6 +1576,8 @@ void R_DrawAliasModel (entity_t *ent)
 
 	VectorCopy (ent->origin, r_entorigin);
 	VectorSubtract (r_origin, r_entorigin, modelorg);
+
+	overbright = gl_overbright_models.value;
 
 	// get lighting information
 	R_SetupLighting (ent);
@@ -2983,7 +3009,7 @@ void R_DrawViewModel (void)
 	currententity->transparency = (cl.items & IT_INVISIBILITY) ? gl_ringalpha.value : bound(0, r_drawviewmodel.value, 1);
 
 	// hack the depth range to prevent view model from poking into walls
-	glDepthRange (gldepthmin, gldepthmin + 0.3 * (gldepthmax - gldepthmin));
+	glDepthRange (0, 0.3);
 
 	switch (currententity->model->type)
 	{
@@ -2996,7 +3022,7 @@ void R_DrawViewModel (void)
 		break;
 	}
 
-	glDepthRange (gldepthmin, gldepthmax);
+	glDepthRange (0, 1);
 }
 
 /*
@@ -3301,8 +3327,6 @@ void R_SetupGL (void)
 
 	GL_SetFrustum(r_fovx, r_fovy); //johnfitz -- use r_fov* vars
 
-	glCullFace (GL_FRONT);
-
 	glMatrixMode (GL_MODELVIEW);
 	glLoadIdentity ();
 
@@ -3368,7 +3392,6 @@ void R_Init (void)
 	Cvar_Register (&gl_finish);
 	Cvar_Register (&gl_clear);
 	Cvar_Register (&gl_cull);
-	Cvar_Register (&gl_ztrick);
 	Cvar_Register (&gl_smoothmodels);
 	Cvar_Register (&gl_affinemodels);
 	Cvar_Register (&gl_polyblend);
@@ -3387,6 +3410,8 @@ void R_Init (void)
 	Cvar_Register (&gl_ringalpha);
 	Cvar_Register (&gl_fb_bmodels);
 	Cvar_Register (&gl_fb_models);
+	Cvar_Register (&gl_overbright);
+	Cvar_Register (&gl_overbright_models);
 	Cvar_Register (&gl_solidparticles);
 	Cvar_Register (&gl_vertexlights);
 	Cvar_Register (&gl_shownormals);
@@ -3418,9 +3443,6 @@ void R_Init (void)
 	// this minigl driver seems to slow us down if the particles are drawn WITHOUT Z buffer bits
 	if (!strcmp(gl_vendor, "METABYTE/WICKED3D"))
 		Cvar_SetDefault (&gl_solidparticles, 1);
-
-	if (!gl_allow_ztrick)
-		Cvar_SetDefault (&gl_ztrick, 0);
 
 	R_InitTextures ();
 	R_InitBubble ();
@@ -3484,8 +3506,6 @@ void R_RenderScene (void)
 	R_DrawViewModel();
 }
 
-int	gl_ztrickframe = 0;
-
 /*
 =============
 R_Clear
@@ -3493,46 +3513,16 @@ R_Clear
 */
 void R_Clear (void)
 {
-	int	clearbits = 0;
+	unsigned int clearbits = GL_DEPTH_BUFFER_BIT;
 
 	if (gl_clear.value || (!vid_hwgamma_enabled && v_contrast.value > 1))
 		clearbits |= GL_COLOR_BUFFER_BIT;
-
-	if (gl_ztrick.value)
+	if (gl_have_stencil && r_shadows.value == 2)
 	{
-		if (clearbits)
-			glClear (clearbits);
-
-		gl_ztrickframe = !gl_ztrickframe;
-		if (gl_ztrickframe)
-		{
-			gldepthmin = 0;
-			gldepthmax = 0.49999;
-			glDepthFunc (GL_LEQUAL);
-		}
-		else
-		{
-			gldepthmin = 1;
-			gldepthmax = 0.5;
-			glDepthFunc (GL_GEQUAL);
-		}
+		glClearStencil(GL_TRUE);
+		clearbits |= GL_STENCIL_BUFFER_BIT;
 	}
-	else
-	{
-		clearbits |= GL_DEPTH_BUFFER_BIT;
-		glClear (clearbits);
-		gldepthmin = 0;
-		gldepthmax = 1;
-		glDepthFunc (GL_LEQUAL);
-	}
-
-	glDepthRange (gldepthmin, gldepthmax);
-
-	if (r_shadows.value == 2)
-	{
-		glClearStencil (GL_TRUE);
-		glClear (GL_STENCIL_BUFFER_BIT);
-	}
+	glClear (clearbits);
 }
 
 static GLuint r_scaleview_texture;

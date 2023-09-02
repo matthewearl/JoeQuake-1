@@ -421,7 +421,7 @@ store:
 		{
 			for (j = 0; j < smax; j++)
 			{
-				if (lightmode == 2)
+				if (gl_overbright.value)
 				{
 					r = *bl++ >> 8;
 					g = *bl++ >> 8;
@@ -433,11 +433,21 @@ store:
 					g = *bl++ >> 7;
 					b = *bl++ >> 7;
 				}
-				r = (r > 1023) ? 1023 : r;
-				g = (g > 1023) ? 1023 : g;
-				b = (b > 1023) ? 1023 : b;
-				*(unsigned int*)dest = (r << 22) | (g << 12) | (b << 2) | 3;
-				dest += 4;
+				if (gl_packed_pixels)
+				{
+					r = (r > 1023) ? 1023 : r;
+					g = (g > 1023) ? 1023 : g;
+					b = (b > 1023) ? 1023 : b;
+					*(unsigned int*)dest = (r << 22) | (g << 12) | (b << 2) | 3;
+					dest += 4;
+				}
+				else
+				{
+					*dest++ = (r > 255) ? 255 : r;
+					*dest++ = (g > 255) ? 255 : g;
+					*dest++ = (b > 255) ? 255 : b;
+					*dest++ = 255;
+				}
 			}
 		}
 		break;
@@ -448,7 +458,7 @@ store:
 		{
 			for (j = 0; j < smax; j++)
 			{
-				if (lightmode == 2)
+				if (gl_overbright.value)
 				{
 					r = *bl++ >> 8;
 					g = *bl++ >> 8;
@@ -460,11 +470,21 @@ store:
 					g = *bl++ >> 7;
 					b = *bl++ >> 7;
 				}
-				b = (b > 1023) ? 1023 : b;
-				g = (g > 1023) ? 1023 : g;
-				r = (r > 1023) ? 1023 : r;
-				*(unsigned int*)dest = (b << 22) | (g << 12) | (r << 2) | 3;
-				dest += 4;
+				if (gl_packed_pixels)
+				{
+					r = (r > 1023) ? 1023 : r;
+					g = (g > 1023) ? 1023 : g;
+					b = (b > 1023) ? 1023 : b;
+					*(unsigned int*)dest = (b << 22) | (g << 12) | (r << 2) | 3;
+					dest += 4;
+				}
+				else
+				{
+					*dest++ = (b > 255) ? 255 : b;
+					*dest++ = (g > 255) ? 255 : g;
+					*dest++ = (r > 255) ? 255 : r;
+					*dest++ = 255;
+				}
 			}
 		}
 		break;
@@ -482,6 +502,7 @@ assumes lightmap texture is already bound
 */
 static void R_UploadLightmap(int lmap)
 {
+	const GLenum type = gl_packed_pixels ? GL_UNSIGNED_INT_10_10_10_2 : GL_UNSIGNED_BYTE;
 	struct lightmap_s *lm = &lightmaps[lmap];
 
 	if (!lm->modified)
@@ -490,7 +511,7 @@ static void R_UploadLightmap(int lmap)
 	lm->modified = false;
 
 	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, lm->rectchange.t, LMBLOCK_WIDTH, lm->rectchange.h, gl_lightmap_format,
-		GL_UNSIGNED_INT_10_10_10_2, lm->data + lm->rectchange.t * LMBLOCK_WIDTH * lightmap_bytes);
+		type, lm->data + lm->rectchange.t * LMBLOCK_WIDTH * lightmap_bytes);
 	lm->rectchange.l = LMBLOCK_WIDTH;
 	lm->rectchange.t = LMBLOCK_HEIGHT;
 	lm->rectchange.h = 0;
@@ -509,6 +530,60 @@ void R_UploadLightmaps(void)
 		GL_Bind(lightmaps[lmap].texture);
 		R_UploadLightmap(lmap);
 	}
+}
+
+/*
+================
+R_RebuildAllLightmaps -- johnfitz -- called when gl_overbright gets toggled
+================
+*/
+void R_RebuildAllLightmaps (void)
+{
+	const GLenum type = gl_packed_pixels ? GL_UNSIGNED_INT_10_10_10_2 : GL_UNSIGNED_BYTE;
+	int			i, j;
+	model_t		*mod;
+	msurface_t	*fa;
+	byte		*base;
+
+	if (!cl.worldmodel) // is this the correct test?
+		return;
+
+	//for each surface in each model, rebuild lightmap with new scale
+	for (i=1; i<MAX_MODELS; i++)
+	{
+		if (!(mod = cl.model_precache[i]))
+			continue;
+		fa = &mod->surfaces[mod->firstmodelsurface];
+		for (j=0; j<mod->nummodelsurfaces; j++, fa++)
+		{
+			if (fa->flags & SURF_DRAWTILED)
+				continue;
+			base = lightmaps[fa->lightmaptexturenum].data;
+			base += fa->light_t * LMBLOCK_WIDTH * lightmap_bytes + fa->light_s * lightmap_bytes;
+			R_BuildLightMap (fa, base, LMBLOCK_WIDTH*lightmap_bytes);
+		}
+	}
+
+	//for each lightmap, upload it
+	for (i=0; i<lightmap_count; i++)
+	{
+		GL_Bind (lightmaps[i].texture);
+		glTexSubImage2D (GL_TEXTURE_2D, 0, 0, 0, LMBLOCK_WIDTH, LMBLOCK_HEIGHT, gl_lightmap_format,
+				 type, lightmaps[i].data);
+	}
+}
+
+qboolean OnChange_gl_overbright(cvar_t *var, char *string)
+{
+	float	newval = Q_atof(string);
+	
+	if (!newval == !gl_overbright.value)
+		return false;
+
+	Cvar_SetValue(&gl_overbright, newval);
+	R_RebuildAllLightmaps();
+
+	return true;
 }
 
 /*
@@ -568,10 +643,8 @@ void EmitOutlinePolys(void)
 
 	glEnable(GL_LINE_SMOOTH);
 	glDisable(GL_TEXTURE_2D);
-	glCullFace(GL_BACK);
-
-	glPolygonMode(GL_FRONT, GL_LINE);
-
+	glCullFace(GL_FRONT);
+	glPolygonMode(GL_BACK, GL_LINE);
 	glLineWidth(line_width);
 
 	for (p = outline_polys; p; p = p->outline_chain)
@@ -584,11 +657,11 @@ void EmitOutlinePolys(void)
 		}
 		glEnd();
 	}
-	glCullFace(GL_FRONT);
+	glCullFace(GL_BACK);
 	glColor4f(1, 1, 1, 1);
 	glDisable(GL_LINE_SMOOTH);
 	glEnable(GL_TEXTURE_2D);
-	glPolygonMode(GL_FRONT, GL_FILL);
+	glPolygonMode(GL_BACK, GL_FILL);
 	outline_polys = NULL;
 	glEnable(GL_TEXTURE_2D);
 }
@@ -605,9 +678,12 @@ void R_BlendLightmaps ()
 	glpoly_t	*p;
 
 	glDepthMask (GL_FALSE);		// don't bother writing Z
-	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
-	glTexEnvf(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_MODULATE);
-	glTexEnvf(GL_TEXTURE_ENV, GL_RGB_SCALE, 4.0f);
+	if (gl_overbright.value)
+	{
+		glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
+		glTexEnvf(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_MODULATE);
+		glTexEnvf(GL_TEXTURE_ENV, GL_RGB_SCALE, 2.0f);
+	}
 	glBlendFunc (GL_ZERO, GL_SRC_COLOR);
 
 	if (!r_lightmap.value)
@@ -635,8 +711,11 @@ void R_BlendLightmaps ()
 	}
 
 	Fog_StopAdditive();
-	glTexEnvf(GL_TEXTURE_ENV, GL_RGB_SCALE, 1.0f);
-	glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+	if (gl_overbright.value)
+	{
+		glTexEnvf(GL_TEXTURE_ENV, GL_RGB_SCALE, 1.0f);
+		glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+	}
 	glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 	glDisable (GL_BLEND);
 	glDepthMask (GL_TRUE);		// back to normal Z buffering
@@ -1059,6 +1138,7 @@ static GLuint causticsTexLoc;
 static GLuint useFullbrightTexLoc;
 static GLuint useOverbrightLoc;
 static GLuint useAlphaTestLoc;
+static GLuint usePackedPixelsLoc;
 static GLuint useWaterFogLoc;
 static GLuint alphaLoc;
 static GLuint clTimeLoc;
@@ -1118,6 +1198,7 @@ void GLWorld_CreateShaders(void)
 		"uniform bool UseCausticsTex;\n"
 		"uniform bool UseOverbright;\n"
 		"uniform bool UseAlphaTest;\n"
+		"uniform bool UsePackedPixels;\n"
 		"uniform int UseWaterFog;\n"
 		"uniform float Alpha;\n"
 		"uniform float ClTime;\n"
@@ -1155,7 +1236,8 @@ void GLWorld_CreateShaders(void)
 		"	if (UseAlphaTest && (result.a < 0.666))\n"
 		"		discard;\n"
 		"	result *= texture2D(LMTex, gl_TexCoord[1].xy);\n"
-		"   result.rgb *= 4.0;\n"
+		"	if (UsePackedPixels)\n"
+		"	    result.rgb *= 4.0;\n"
 		"	if (UseOverbright)\n"
 		"		result.rgb *= 2.0;\n"
 		"	vec4 fb = texture2D(FullbrightTex, gl_TexCoord[0].xy);\n"
@@ -1209,6 +1291,7 @@ void GLWorld_CreateShaders(void)
 		useCausticsTexLoc = GL_GetUniformLocation(&r_world_program, "UseCausticsTex");
 		useOverbrightLoc = GL_GetUniformLocation(&r_world_program, "UseOverbright");
 		useAlphaTestLoc = GL_GetUniformLocation(&r_world_program, "UseAlphaTest");
+		usePackedPixelsLoc = GL_GetUniformLocation(&r_world_program, "UsePackedPixels");
 		useWaterFogLoc = GL_GetUniformLocation(&r_world_program, "UseWaterFog");
 		alphaLoc = GL_GetUniformLocation(&r_world_program, "Alpha");
 		clTimeLoc = GL_GetUniformLocation(&r_world_program, "ClTime");
@@ -1262,8 +1345,9 @@ void R_DrawTextureChains_GLSL(model_t *model, texchain_t chain)
 	qglUniform1i(useFullbrightTexLoc, 0);
 	qglUniform1i(useDetailTexLoc, 0);
 	qglUniform1i(useCausticsTexLoc, 0);
-	qglUniform1i(useOverbrightLoc, 0);
+	qglUniform1i(useOverbrightLoc, (int)gl_overbright.value);
 	qglUniform1i(useAlphaTestLoc, 0);
+	qglUniform1i(usePackedPixelsLoc, gl_packed_pixels);
 	qglUniform1i(useWaterFogLoc, (r_viewleaf->contents != CONTENTS_EMPTY && r_viewleaf->contents != CONTENTS_SOLID) ? (int)gl_waterfog.value : 0);
 	qglUniform1f(alphaLoc, ent->transparency == 0 ? 1 : ent->transparency);
 	qglUniform1f(clTimeLoc, cl.time);
@@ -1412,9 +1496,16 @@ void R_DrawTextureChains_Multitexture (model_t *model, texchain_t chain)
 						doMtex2 = true;
 						GL_LIGHTMAP_TEXTURE = GL_TEXTURE2;
 						GL_EnableTMU (GL_LIGHTMAP_TEXTURE);
-						glTexEnvf (GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
-						glTexEnvf (GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_MODULATE);
-						glTexEnvf (GL_TEXTURE_ENV, GL_RGB_SCALE, 4.0f);
+						if (gl_overbright.value)
+						{
+							glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
+							glTexEnvf(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_MODULATE);
+							glTexEnvf(GL_TEXTURE_ENV, GL_RGB_SCALE, 2.0f);
+						}
+						else
+						{
+							glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+						}
 					}
 					else
 					{
@@ -1434,9 +1525,16 @@ void R_DrawTextureChains_Multitexture (model_t *model, texchain_t chain)
 				doMtex1 = true;
 				GL_LIGHTMAP_TEXTURE = GL_TEXTURE1;
 				GL_EnableTMU (GL_LIGHTMAP_TEXTURE);
-				glTexEnvf (GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
-				glTexEnvf (GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_MODULATE);
-				glTexEnvf (GL_TEXTURE_ENV, GL_RGB_SCALE, 4.0f);
+				if (gl_overbright.value)
+				{
+					glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
+					glTexEnvf(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_MODULATE);
+					glTexEnvf(GL_TEXTURE_ENV, GL_RGB_SCALE, 2.0f);
+				}
+				else
+				{
+					glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+				}
 
 				mtex_lightmaps = true;
 				mtex_fbs = at->fb_texturenum && draw_mtex_fbs;
@@ -1672,10 +1770,11 @@ void R_DrawTextureChains_Water(model_t *model, entity_t *ent, texchain_t chain)
 			qglUniform1i(LMTexLoc, 1);
 			qglUniform1i(fullbrightTexLoc, 2);
 			qglUniform1i(useFullbrightTexLoc, 0);
+			qglUniform1i(useOverbrightLoc, (int)gl_overbright.value);
 			qglUniform1i(useDetailTexLoc, 0);
 			qglUniform1i(useCausticsTexLoc, 0);
-			qglUniform1i(useOverbrightLoc, 1);
 			qglUniform1i(useAlphaTestLoc, 0);
+			qglUniform1i(usePackedPixelsLoc, gl_packed_pixels);
 			qglUniform1i(useWaterFogLoc, 0);
 			qglUniform1f(clTimeLoc, cl.time);
 
@@ -2219,6 +2318,9 @@ void GL_BuildLightmaps (void)
 	// upload all lightmaps that were filled
 	for (i = 0 ; i < lightmap_count; i++)
 	{
+		const GLint internalfmt = gl_packed_pixels ? GL_RGB10_A2 : lightmap_bytes;
+		const GLenum type = gl_packed_pixels ? GL_UNSIGNED_INT_10_10_10_2 : GL_UNSIGNED_BYTE;
+
 		lm = &lightmaps[i];
 		lm->modified = false;
 		lm->rectchange.l = LMBLOCK_WIDTH;
@@ -2230,8 +2332,8 @@ void GL_BuildLightmaps (void)
 		GL_Bind (lm->texture);
 		glTexParameterf (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexParameterf (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-		glTexImage2D (GL_TEXTURE_2D, 0, GL_RGB10_A2, LMBLOCK_WIDTH, LMBLOCK_HEIGHT, 0,
-			gl_lightmap_format, GL_UNSIGNED_INT_10_10_10_2, lm->data);
+		glTexImage2D (GL_TEXTURE_2D, 0, internalfmt, LMBLOCK_WIDTH, LMBLOCK_HEIGHT, 0,
+			gl_lightmap_format, type, lm->data);
 	}
 
 	if (gl_mtexable)

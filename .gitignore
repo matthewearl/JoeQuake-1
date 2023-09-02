@@ -13,6 +13,7 @@ trunk/.vs/*
 *.asm
 *.user
 *.ipch
+*.vs
 _shelve_*
 build
 trunk/debug_*
