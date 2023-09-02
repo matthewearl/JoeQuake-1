@@ -21,8 +21,6 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "quakedef.h"
 
-extern	unsigned d_8to24table2[256];
-
 int		texture_extension_number = 1;
 
 extern qboolean OnChange_gl_picmip (cvar_t *var, char *string);
@@ -1157,7 +1155,6 @@ void Draw_AlphaPic (int x, int y, mpic_t *pic, float alpha)
 	
 	glDisable (GL_ALPHA_TEST);
 	glEnable (GL_BLEND);
-	glCullFace (GL_FRONT);
 	glColor4f (1, 1, 1, alpha);
 	GL_Bind (pic->texnum);
 	glTexParameterf (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, gl_filter_minmax_hud);
@@ -1323,7 +1320,6 @@ void Draw_SAlphaSubPic2(int x, int y, mpic_t *pic, int src_x, int src_y, int src
 		glEnable(GL_BLEND);
 		glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 		glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
-		glCullFace(GL_FRONT);
 		glColor4f(1, 1, 1, alpha);
 	}
 
@@ -1896,7 +1892,7 @@ void GL_Upload8 (byte *data, int width, int height, int mode)
 	unsigned	*table;
 	static unsigned	trans[2048*2048*4];	// joe: raised value from 960*480
 
-	table = (mode & TEX_BRIGHTEN) ? d_8to24table2 : d_8to24table;
+	table = d_8to24table;
 	size = width * height;
 
 	if (size * 4 > sizeof(trans))

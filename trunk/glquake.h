@@ -53,7 +53,6 @@ extern	byte	color_white[4], color_black[4];
 #define TEX_ALPHA			4
 #define TEX_LUMA			8
 #define TEX_FULLBRIGHT		16
-#define	TEX_BRIGHTEN		32
 
 #define	MAX_GLTEXTURES	4096	//joe: was 2048
 
@@ -192,7 +191,6 @@ extern	cvar_t	r_scale;
 extern	cvar_t	gl_clear;
 extern	cvar_t	gl_cull;
 extern	cvar_t	gl_poly;
-extern	cvar_t	gl_ztrick;
 extern	cvar_t	gl_smoothmodels;
 extern	cvar_t	gl_affinemodels;
 extern	cvar_t	gl_polyblend;
@@ -209,6 +207,8 @@ extern  cvar_t  gl_detail;
 extern  cvar_t  gl_caustics;
 extern	cvar_t	gl_fb_bmodels;
 extern	cvar_t	gl_fb_models;
+extern	cvar_t	gl_overbright;
+extern	cvar_t	gl_overbright_models;
 extern  cvar_t  gl_solidparticles;
 extern  cvar_t  gl_vertexlights;
 extern  cvar_t  gl_loadq3models;
@@ -246,8 +246,6 @@ extern	cvar_t	gl_externaltextures_models;
 extern	cvar_t	gl_externaltextures_gfx;
 
 extern qboolean draw_no24bit;
-
-extern	int	lightmode;
 
 extern	int	gl_lightmap_format;
 extern	int	gl_solid_format;
@@ -363,6 +361,7 @@ extern qboolean	gl_vbo_able;
 extern qboolean	gl_glsl_able;
 extern qboolean gl_glsl_gamma_able;
 extern qboolean gl_glsl_alias_able;
+extern qboolean gl_packed_pixels;
 
 typedef struct glsl_attrib_binding_s {
 	const char *name;
@@ -375,8 +374,9 @@ void GL_EnableMultitexture (void);
 // vid_common_gl.c
 void Check_Gamma (unsigned char *pal);
 void GL_Init (void);
+void GL_SetupState(void);
 qboolean CheckExtension (const char *extension);
-extern qboolean	gl_add_ext, gl_allow_ztrick;
+extern qboolean	gl_add_ext;
 
 // gl_warp.c
 void GL_SubdivideSurface (msurface_t *fa);

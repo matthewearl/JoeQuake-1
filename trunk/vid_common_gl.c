@@ -43,6 +43,8 @@ qboolean	gl_vbo_able = false;
 qboolean	gl_glsl_able = false;
 qboolean	gl_glsl_gamma_able = false;
 qboolean	gl_glsl_alias_able = false; //ericw
+qboolean	gl_packed_pixels = false;
+qboolean	gl_nv_depth_clamp = false;
 
 lpGenerateMipmapFUNC qglGenerateMipmap = NULL;
 
@@ -85,14 +87,10 @@ lpUniformBlockBindingFUNC qglUniformBlockBinding = NULL;
 
 qboolean	gl_add_ext = false;
 
-float		gldepthmin, gldepthmax;
-qboolean	gl_allow_ztrick = true;
-
 float		vid_gamma = 1.0;
 byte		vid_gamma_table[256];
 
 unsigned	d_8to24table[256];
-unsigned	d_8to24table2[256];
 
 byte		color_white[4] = {255, 255, 255, 0};
 byte		color_black[4] = {0, 0, 0, 0};
@@ -289,7 +287,59 @@ void CheckGLSLExtensions(void)
 
 	// GLSL alias model rendering
 	if (!COM_CheckParm("-noglslalias") && gl_glsl_able && gl_vbo_able && gl_textureunits >= 4)
+	{
 		gl_glsl_alias_able = true;
+	}
+
+	// 10bit color buffer
+	if (!COM_CheckParm("-nopackedpixels") && gl_glsl_alias_able)
+	{
+		gl_packed_pixels = true;
+	}
+}
+
+void CheckDepthClampExtensions(void)
+{
+	// ARB_depth_clamp
+	if (!COM_CheckParm("-nodepthclamp") && 
+		(CheckExtension("GL_ARB_depth_clamp") || CheckExtension("GL_NV_depth_clamp")))
+	{
+		Con_Printf("Depth clamp extensions found\n");
+		gl_nv_depth_clamp = true;
+	}
+}
+
+/*
+===============
+GL_SetupState -- johnfitz
+
+does all the stuff from GL_Init that needs to be done every time a new GL render context is created
+===============
+*/
+void GL_SetupState (void)
+{
+	glClearColor (0.15, 0.15, 0.15, 0);
+	glCullFace(GL_BACK); //johnfitz -- glquake used CCW with backwards culling -- let's do it right
+	glFrontFace(GL_CW); //johnfitz -- glquake used CCW with backwards culling -- let's do it right
+	glEnable (GL_TEXTURE_2D);
+	glEnable (GL_ALPHA_TEST);
+	glAlphaFunc (GL_GREATER, 0.666);
+
+	glPolygonMode (GL_FRONT_AND_BACK, GL_FILL);
+	glShadeModel (GL_FLAT);
+	glHint (GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST); //johnfitz
+
+	glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	glTexEnvf (GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+	glTexParameterf (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameterf (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameterf (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameterf (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+	glDepthRange (0, 1); //johnfitz -- moved here becuase gl_ztrick is gone.
+	glDepthFunc (GL_LEQUAL); //johnfitz -- moved here becuase gl_ztrick is gone.
+	if (gl_nv_depth_clamp)
+		glEnable(GL_DEPTH_CLAMP_NV);
 }
 
 /*
@@ -318,36 +368,13 @@ void GL_Init (void)
 	if (!Q_strncasecmp((char *)gl_renderer, "PowerVR", 7))
 		fullsbardraw = true;
 
-	glClearColor (0, 0, 0, 0);
-	glCullFace (GL_FRONT);
-	glEnable (GL_TEXTURE_2D);
-
-	glEnable (GL_ALPHA_TEST);
-	glAlphaFunc (GL_GREATER, 0.666);
-
-	// Get rid of Z-fighting for textures by offsetting the
-	// drawing of entity models compared to normal polygons.
-	// (Only works if gl_ztrick is turned off)
-	glPolygonOffset (0.05, 25.0);
-
-	glPolygonMode (GL_FRONT_AND_BACK, GL_FILL);
-	glShadeModel (GL_FLAT);
-
-	glTexParameterf (GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	glTexParameterf (GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	glTexParameterf (GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-	glTexParameterf (GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-
-	glBlendFunc (GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-	glTexEnvf (GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
-
 	gl_add_ext = CheckExtension("GL_ARB_texture_env_add");
 	CheckGenerateMipmapExtension();
 	CheckMultiTextureExtensions ();
 	CheckAnisotropicFilteringExtensions();
 	CheckVertexBufferExtensions();
 	CheckGLSLExtensions();
+	CheckDepthClampExtensions();
 
 	GLAlias_CreateShaders();
 	GLWorld_CreateShaders();
@@ -405,17 +432,4 @@ void VID_SetPalette (unsigned char *palette)
 		*table++ = (255<<24) + (r<<0) + (g<<8) + (b<<16);
 	}
 	d_8to24table[255] = 0;	// 255 is transparent
-
-// Tonik: create a brighter palette for bmodel textures
-	pal = palette;
-	table = d_8to24table2;
-	for (i = 0 ; i < 256 ; i++)
-	{
-		r = min(pal[0] * 2.0, 255);
-		g = min(pal[1] * 2.0, 255);
-		b = min(pal[2] * 2.0, 255);
-		pal += 3;
-		*table++ = (255<<24) + (r<<0) + (g<<8) + (b<<16);
-	}
-	d_8to24table2[255] = 0;	// 255 is transparent
 }
