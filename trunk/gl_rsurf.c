@@ -432,6 +432,11 @@ store:
 					r = *bl++ >> 7;
 					g = *bl++ >> 7;
 					b = *bl++ >> 7;
+
+					// artifically clamp to 255 so gl_overbright 0 renders as expected in the gl_packed_pixels case
+					r = (r > 255) ? 255 : r;
+					g = (g > 255) ? 255 : g;
+					b = (b > 255) ? 255 : b;
 				}
 				if (gl_packed_pixels)
 				{
@@ -469,6 +474,11 @@ store:
 					r = *bl++ >> 7;
 					g = *bl++ >> 7;
 					b = *bl++ >> 7;
+
+					// artifically clamp to 255 so gl_overbright 0 renders as expected in the gl_packed_pixels case
+					r = (r > 255) ? 255 : r;
+					g = (g > 255) ? 255 : g;
+					b = (b > 255) ? 255 : b;
 				}
 				if (gl_packed_pixels)
 				{
@@ -668,28 +678,14 @@ void EmitOutlinePolys(void)
 
 /*
 ================
-R_BlendLightmaps
+R_DrawLightmapChains -- johnfitz -- R_BlendLightmaps stripped down to almost nothing
 ================
 */
-void R_BlendLightmaps ()
+void R_DrawLightmapChains (void)
 {
 	int			i, j;
-	float		*v;
 	glpoly_t	*p;
-
-	glDepthMask (GL_FALSE);		// don't bother writing Z
-	if (gl_overbright.value)
-	{
-		glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
-		glTexEnvf(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_MODULATE);
-		glTexEnvf(GL_TEXTURE_ENV, GL_RGB_SCALE, 2.0f);
-	}
-	glBlendFunc (GL_ZERO, GL_SRC_COLOR);
-
-	if (!r_lightmap.value)
-		glEnable (GL_BLEND);
-
-	Fog_StartAdditive();
+	float		*v;
 
 	for (i = 0 ; i < lightmap_count; i++)
 	{
@@ -709,6 +705,28 @@ void R_BlendLightmaps ()
 			glEnd ();
 		}
 	}
+}
+
+/*
+================
+R_BlendLightmaps
+================
+*/
+void R_BlendLightmaps ()
+{
+	glDepthMask (GL_FALSE);		// don't bother writing Z
+	if (gl_overbright.value)
+	{
+		glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_COMBINE);
+		glTexEnvf(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_MODULATE);
+		glTexEnvf(GL_TEXTURE_ENV, GL_RGB_SCALE, 2.0f);
+	}
+	glBlendFunc (GL_ZERO, GL_SRC_COLOR);
+	glEnable (GL_BLEND);
+
+	Fog_StartAdditive();
+
+	R_DrawLightmapChains();
 
 	Fog_StopAdditive();
 	if (gl_overbright.value)
@@ -1139,6 +1157,7 @@ static GLuint useFullbrightTexLoc;
 static GLuint useOverbrightLoc;
 static GLuint useAlphaTestLoc;
 static GLuint usePackedPixelsLoc;
+static GLint  useLightmapOnlyLoc;
 static GLuint useWaterFogLoc;
 static GLuint alphaLoc;
 static GLuint clTimeLoc;
@@ -1153,8 +1172,23 @@ static GLuint clTimeLoc;
 GLWorld_CreateShaders
 =============
 */
+#define TURBSINSIZE 128
+#define STRINGIFY(x) #x
+#define TOSTRING(x) STRINGIFY(x)
 void GLWorld_CreateShaders(void)
 {
+	GLuint turbsinLoc;
+	const int turbsin[TURBSINSIZE] = {
+		127, 133, 139, 146, 152, 158, 164, 170, 176, 182, 187, 193, 198, 203, 208, 213,
+		217, 221, 226, 229, 233, 236, 239, 242, 245, 247, 249, 251, 252, 253, 254, 254,
+		255, 254, 254, 253, 252, 251, 249, 247, 245, 242, 239, 236, 233, 229, 226, 221,
+		217, 213, 208, 203, 198, 193, 187, 182, 176, 170, 164, 158, 152, 146, 139, 133,
+		127, 121, 115, 108, 102, 96, 90, 84, 78, 72, 67, 61, 56, 51, 46, 41,
+		37, 33, 28, 25, 21, 18, 15, 12, 9, 7, 5, 3, 2, 1, 0, 0,
+		0, 0, 0, 1, 2, 3, 5, 7, 9, 12, 15, 18, 21, 25, 28, 33,
+		37, 41, 46, 51, 56, 61, 67, 72, 78, 84, 90, 96, 102, 108, 115, 121,
+	};
+
 	const glsl_attrib_binding_t bindings[] = {
 		{ "Vert", vertAttrIndex },
 		{ "TexCoords", texCoordsAttrIndex },
@@ -1185,7 +1219,7 @@ void GLWorld_CreateShaders(void)
 		"#version 130\n"	// required for bitwise operators
 		"\n"
 		"#define M_PI			3.1415926535897932384626433832795\n"
-		"#define TURBSINSIZE	128\n"
+		"#define TURBSINSIZE	" TOSTRING(TURBSINSIZE) "\n"
 		"#define TURBSCALE		(float(TURBSINSIZE) / (2.0 * M_PI))\n"
 		"\n"
 		"uniform sampler2D Tex;\n"
@@ -1199,20 +1233,11 @@ void GLWorld_CreateShaders(void)
 		"uniform bool UseOverbright;\n"
 		"uniform bool UseAlphaTest;\n"
 		"uniform bool UsePackedPixels;\n"
+		"uniform bool UseLightmapOnly;\n"
 		"uniform int UseWaterFog;\n"
 		"uniform float Alpha;\n"
 		"uniform float ClTime;\n"
-		"uniform int turbsin[TURBSINSIZE] =\n"
-		"{\n"
-		"	127, 133, 139, 146, 152, 158, 164, 170, 176, 182, 187, 193, 198, 203, 208, 213,\n"
-		"	217, 221, 226, 229, 233, 236, 239, 242, 245, 247, 249, 251, 252, 253, 254, 254,\n"
-		"	255, 254, 254, 253, 252, 251, 249, 247, 245, 242, 239, 236, 233, 229, 226, 221,\n"
-		"	217, 213, 208, 203, 198, 193, 187, 182, 176, 170, 164, 158, 152, 146, 139, 133,\n"
-		"	127, 121, 115, 108, 102, 96, 90, 84, 78, 72, 67, 61, 56, 51, 46, 41,\n"
-		"	37, 33, 28, 25, 21, 18, 15, 12, 9, 7, 5, 3, 2, 1, 0, 0,\n"
-		"	0, 0, 0, 1, 2, 3, 5, 7, 9, 12, 15, 18, 21, 25, 28, 33,\n"
-		"	37, 41, 46, 51, 56, 61, 67, 72, 78, 84, 90, 96, 102, 108, 115, 121,\n"
-		"};\n"
+		"uniform int turbsin[TURBSINSIZE];\n"
 		"\n"
 		"varying float FogFragCoord;\n"
 		"\n"
@@ -1233,6 +1258,8 @@ void GLWorld_CreateShaders(void)
 		"void main()\n"
 		"{\n"
 		"	vec4 result = texture2D(Tex, gl_TexCoord[0].xy);\n"
+		"	if (UseLightmapOnly)\n"
+		"		result = vec4(0.5, 0.5, 0.5, 1.0);\n"
 		"	if (UseAlphaTest && (result.a < 0.666))\n"
 		"		discard;\n"
 		"	result *= texture2D(LMTex, gl_TexCoord[1].xy);\n"
@@ -1292,9 +1319,14 @@ void GLWorld_CreateShaders(void)
 		useOverbrightLoc = GL_GetUniformLocation(&r_world_program, "UseOverbright");
 		useAlphaTestLoc = GL_GetUniformLocation(&r_world_program, "UseAlphaTest");
 		usePackedPixelsLoc = GL_GetUniformLocation(&r_world_program, "UsePackedPixels");
+		useLightmapOnlyLoc = GL_GetUniformLocation (&r_world_program, "UseLightmapOnly");
 		useWaterFogLoc = GL_GetUniformLocation(&r_world_program, "UseWaterFog");
 		alphaLoc = GL_GetUniformLocation(&r_world_program, "Alpha");
 		clTimeLoc = GL_GetUniformLocation(&r_world_program, "ClTime");
+
+		// Fill in the turbsin lookup
+		turbsinLoc = GL_GetUniformLocation(&r_world_program, "turbsin");
+		qglUniform1iv(turbsinLoc, TURBSINSIZE, turbsin);
 	}
 }
 
@@ -1348,6 +1380,7 @@ void R_DrawTextureChains_GLSL(model_t *model, texchain_t chain)
 	qglUniform1i(useOverbrightLoc, (int)gl_overbright.value);
 	qglUniform1i(useAlphaTestLoc, 0);
 	qglUniform1i(usePackedPixelsLoc, gl_packed_pixels);
+	qglUniform1i(useLightmapOnlyLoc, 0);
 	qglUniform1i(useWaterFogLoc, (r_viewleaf->contents != CONTENTS_EMPTY && r_viewleaf->contents != CONTENTS_SOLID) ? (int)gl_waterfog.value : 0);
 	qglUniform1f(alphaLoc, ent->transparency == 0 ? 1 : ent->transparency);
 	qglUniform1f(clTimeLoc, cl.time);
@@ -1430,6 +1463,87 @@ void R_DrawTextureChains_GLSL(model_t *model, texchain_t chain)
 		glDepthMask(GL_TRUE);
 		glDisable(GL_BLEND);
 	}
+}
+
+/*
+================
+R_DrawLightmapChains_GLSL -- ericw
+================
+*/
+void R_DrawLightmapChains_GLSL(model_t *model, texchain_t chain)
+{
+	int			i, lastlightmap;
+	msurface_t	*s;
+	texture_t	*t;
+
+	qglUseProgram(r_world_program);
+
+	// Bind the buffers
+	GL_BindBuffer(GL_ARRAY_BUFFER, gl_bmodel_vbo);
+	GL_BindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0); // indices come from client memory!
+
+	qglEnableVertexAttribArray(vertAttrIndex);
+	qglEnableVertexAttribArray(texCoordsAttrIndex);
+	qglEnableVertexAttribArray(LMCoordsAttrIndex);
+
+	qglVertexAttribPointer(vertAttrIndex, 3, GL_FLOAT, GL_FALSE, VERTEXSIZE * sizeof(float), ((float*)0));
+	qglVertexAttribPointer(texCoordsAttrIndex, 2, GL_FLOAT, GL_FALSE, VERTEXSIZE * sizeof(float), ((float*)0) + 3);
+	qglVertexAttribPointer(LMCoordsAttrIndex, 2, GL_FLOAT, GL_FALSE, VERTEXSIZE * sizeof(float), ((float*)0) + 5);
+
+	// set uniforms
+	qglUniform1i(texLoc, 0);
+	qglUniform1i(LMTexLoc, 1);
+	qglUniform1i(fullbrightTexLoc, 2);
+	qglUniform1i(useFullbrightTexLoc, 0);
+	qglUniform1i(useOverbrightLoc, (int)gl_overbright.value);
+	qglUniform1i(useDetailTexLoc, 0);
+	qglUniform1i(useCausticsTexLoc, 0);
+	qglUniform1i(useAlphaTestLoc, 0);
+	qglUniform1i(usePackedPixelsLoc, gl_packed_pixels);
+	qglUniform1f(alphaLoc, 1.0f);
+	qglUniform1i(useLightmapOnlyLoc, 1);
+	qglUniform1i(useWaterFogLoc, 0);
+	qglUniform1f(clTimeLoc, cl.time);
+
+	R_ClearBatch();
+	lastlightmap = -1;
+
+	for (i = 0; i < model->numtextures; i++)
+	{
+		t = model->textures[i];
+
+		if (!t || !t->texturechains[chain] || t->texturechains[chain]->flags & (SURF_DRAWTILED | SURF_NOTEXTURE))
+			continue;
+
+		if (t->texturechains[chain]->texinfo->flags & TEX_SPECIAL)
+			continue; // unlit water
+
+		for (s = t->texturechains[chain]; s; s = s->texturechain)
+		{
+			if (s->lightmaptexturenum < 0)
+				continue;
+
+			if (s->lightmaptexturenum != lastlightmap)
+			{
+				R_FlushBatch(IS_WATER);
+
+				GL_SelectTexture(GL_TEXTURE1);
+				GL_Bind(lightmaps[s->lightmaptexturenum].texture);
+				lastlightmap = s->lightmaptexturenum;
+			}
+			R_BatchSurface(s, IS_WATER);
+		}
+	}
+
+	R_FlushBatch(IS_WATER);
+
+	// clean up
+	qglDisableVertexAttribArray(vertAttrIndex);
+	qglDisableVertexAttribArray(texCoordsAttrIndex);
+	qglDisableVertexAttribArray(LMCoordsAttrIndex);
+
+	qglUseProgram(0);
+	GL_SelectTexture(GL_TEXTURE0);
 }
 
 /*
@@ -1775,6 +1889,7 @@ void R_DrawTextureChains_Water(model_t *model, entity_t *ent, texchain_t chain)
 			qglUniform1i(useCausticsTexLoc, 0);
 			qglUniform1i(useAlphaTestLoc, 0);
 			qglUniform1i(usePackedPixelsLoc, gl_packed_pixels);
+			qglUniform1i(useLightmapOnlyLoc, 0);
 			qglUniform1i(useWaterFogLoc, 0);
 			qglUniform1f(clTimeLoc, cl.time);
 
@@ -1912,6 +2027,28 @@ void R_DrawTextureChains(model_t *model, entity_t *ent, texchain_t chain)
 	entalpha = (ent != NULL) ? ent->transparency : 1.0f;
 	
 	R_UploadLightmaps();
+
+	if (r_lightmap.value)
+	{
+		if (r_world_program != 0)
+		{
+			R_DrawLightmapChains_GLSL(model, chain);
+			return;
+		}
+
+		if (!gl_overbright.value)
+		{
+			glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+			glColor3f(0.5, 0.5, 0.5);
+		}
+		R_DrawLightmapChains ();
+		if (!gl_overbright.value)
+		{
+			glColor3f(1, 1, 1);
+			glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
+		}
+		return;
+	}
 
 	if (r_world_program != 0)
 	{
