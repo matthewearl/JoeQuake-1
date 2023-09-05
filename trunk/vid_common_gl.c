@@ -76,6 +76,7 @@ lpEnableVertexAttribArrayFUNC qglEnableVertexAttribArray = NULL; //ericw
 lpDisableVertexAttribArrayFUNC qglDisableVertexAttribArray = NULL; //ericw
 lpGetUniformLocationFUNC qglGetUniformLocation = NULL; //ericw
 lpUniform1iFUNC qglUniform1i = NULL; //ericw
+lpUniform1ivFUNC qglUniform1iv = NULL;
 lpUniform1fFUNC qglUniform1f = NULL; //ericw
 lpUniform3fFUNC qglUniform3f = NULL; //ericw
 lpUniform4fFUNC qglUniform4f = NULL; //ericw
@@ -238,6 +239,7 @@ void CheckGLSLExtensions(void)
 		qglDisableVertexAttribArray = (void *)qglGetProcAddress("glDisableVertexAttribArray");
 		qglGetUniformLocation = (void *)qglGetProcAddress("glGetUniformLocation");
 		qglUniform1i = (void *)qglGetProcAddress("glUniform1i");
+		qglUniform1iv = (void *)qglGetProcAddress("glUniform1iv");
 		qglUniform1f = (void *)qglGetProcAddress("glUniform1f");
 		qglUniform3f = (void *)qglGetProcAddress("glUniform3f");
 		qglUniform4f = (void *)qglGetProcAddress("glUniform4f");
@@ -267,6 +269,7 @@ void CheckGLSLExtensions(void)
 			qglDisableVertexAttribArray &&
 			qglGetUniformLocation &&
 			qglUniform1i &&
+			qglUniform1iv &&
 			qglUniform1f &&
 			qglUniform3f &&
 			qglUniform4f &&
@@ -290,10 +293,15 @@ void CheckGLSLExtensions(void)
 	{
 		gl_glsl_alias_able = true;
 	}
+}
 
+void CheckPackedPixelsExtensions(void)
+{
 	// 10bit color buffer
-	if (!COM_CheckParm("-nopackedpixels") && gl_glsl_alias_able)
+	if (!COM_CheckParm("-nopackedpixels") && gl_glsl_alias_able &&
+		(CheckExtension("GL_APPLE_packed_pixels") || CheckExtension("GL_EXT_packed_pixels")))
 	{
+		Con_Printf("Packed pixels extensions found\n");
 		gl_packed_pixels = true;
 	}
 }
@@ -338,8 +346,10 @@ void GL_SetupState (void)
 
 	glDepthRange (0, 1); //johnfitz -- moved here becuase gl_ztrick is gone.
 	glDepthFunc (GL_LEQUAL); //johnfitz -- moved here becuase gl_ztrick is gone.
+#if 0	//joe: removed due to causing issues in Re:Mobilize mod
 	if (gl_nv_depth_clamp)
 		glEnable(GL_DEPTH_CLAMP_NV);
+#endif
 }
 
 /*
@@ -374,7 +384,10 @@ void GL_Init (void)
 	CheckAnisotropicFilteringExtensions();
 	CheckVertexBufferExtensions();
 	CheckGLSLExtensions();
+	CheckPackedPixelsExtensions();
+#if 0	//joe: removed due to causing issues in Re:Mobilize mod
 	CheckDepthClampExtensions();
+#endif
 
 	GLAlias_CreateShaders();
 	GLWorld_CreateShaders();
