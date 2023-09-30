@@ -223,10 +223,9 @@ void GL_SubdivideSurface(msurface_t *fa)
 
 //=========================================================
 
-#define	TURBSINSIZE	128
 #define	TURBSCALE	((float)TURBSINSIZE / (2 * M_PI))
 
-byte turbsin[TURBSINSIZE] =
+int turbsin[TURBSINSIZE] =
 {
 	127, 133, 139, 146, 152, 158, 164, 170, 176, 182, 187, 193, 198, 203, 208, 213, 
 	217, 221, 226, 229, 233, 236, 239, 242, 245, 247, 249, 251, 252, 253, 254, 254, 
@@ -1168,7 +1167,7 @@ void Sky_NewMap(void)
 			strcpy(key, com_token);
 		while (key[strlen(key) - 1] == ' ') // remove trailing spaces
 			key[strlen(key) - 1] = 0;
-		data = COM_Parse(data);
+		data = COM_ParseEx(data, CPE_ALLOWTRUNC);
 		if (!data)
 			return; // error
 		strcpy(value, com_token);

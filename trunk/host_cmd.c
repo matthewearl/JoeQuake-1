@@ -462,21 +462,36 @@ Host_SavegameComment
 Writes a SAVEGAME_COMMENT_LENGTH character comment describing the current 
 ===============
 */
-void Host_SavegameComment (char *text)
+static void Host_SavegameComment (char text[SAVEGAME_COMMENT_LENGTH + 1])
 {
 	int		i;
 	char	kills[20];
+	char	*p;
 
-	for (i=0 ; i<SAVEGAME_COMMENT_LENGTH ; i++)
+	for (i = 0; i < SAVEGAME_COMMENT_LENGTH; i++)
 		text[i] = ' ';
-	memcpy (text, cl.levelname, strlen(cl.levelname));
+	text[SAVEGAME_COMMENT_LENGTH] = '\0';
+
+	i = (int) strlen(cl.levelname);
+	if (i > 22) i = 22;
+	memcpy (text, cl.levelname, (size_t)i);
+
+	// Remove CR/LFs from level name to avoid broken saves, e.g. with autumn_sp map:
+	// https://celephais.net/board/view_thread.php?id=60452&start=3666
+	while ((p = strchr(text, '\n')) != NULL)
+		*p = ' ';
+	while ((p = strchr(text, '\r')) != NULL)
+		*p = ' ';
+
 	sprintf (kills,"kills:%3i/%3i", cl.stats[STAT_MONSTERS], cl.stats[STAT_TOTALMONSTERS]);
 	memcpy (text+22, kills, strlen(kills));
-// convert space to _ to make stdio happy
-	for (i=0 ; i<SAVEGAME_COMMENT_LENGTH ; i++)
+
+	// convert space to _ to make stdio happy
+	for (i = 0; i < SAVEGAME_COMMENT_LENGTH; i++)
+	{
 		if (text[i] == ' ')
 			text[i] = '_';
-	text[SAVEGAME_COMMENT_LENGTH] = '\0';
+	}
 }
 
 /*
@@ -486,8 +501,8 @@ Host_Savegame_f
 */
 void Host_Savegame_f (void)
 {
-	int	i;
-	char	name[256], comment[SAVEGAME_COMMENT_LENGTH+1];
+	int		i;
+	char	name[MAX_OSPATH], comment[SAVEGAME_COMMENT_LENGTH+1];
 	FILE	*f;
 
 	if (cmd_source != src_command)
@@ -532,7 +547,7 @@ void Host_Savegame_f (void)
 		}
 	}
 
-	sprintf (name, "%s/%s", com_gamedir, Cmd_Argv(1));
+	Q_snprintfz (name, sizeof(name), "%s/%s", com_gamedir, Cmd_Argv(1));
 	COM_ForceExtension (name, ".sav");		// joe: force to ".sav"
 	
 	Con_Printf ("Saving game to %s...\n", name);
@@ -552,7 +567,6 @@ void Host_Savegame_f (void)
 	fprintf (f, "%f\n", sv.time);
 
 // write the light styles
-
 	for (i=0 ; i<MAX_LIGHTSTYLES ; i++)
 	{
 		if (sv.lightstyles[i])
@@ -560,7 +574,6 @@ void Host_Savegame_f (void)
 		else
 			fprintf (f,"m\n");
 	}
-
 
 	ED_WriteGlobals (f);
 	for (i=0 ; i<sv.num_edicts ; i++)

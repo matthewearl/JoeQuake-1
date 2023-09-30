@@ -386,16 +386,9 @@ qboolean R_CullModelForEntity(entity_t *e)
 	return R_CullBox(mins, maxs);
 }
 
-/*
-=============
-R_RotateForEntity
-=============
-*/
-void R_RotateForEntity (entity_t *ent, qboolean shadow)
+float R_CalculateLerpfracForEntity(entity_t *ent)
 {
-	int		i;
 	float	lerpfrac;
-	vec3_t	d, interpolated;
 
 	// if LERP_RESETMOVE, kill any lerps in progress
 	if (ent->lerpflags & LERP_RESETMOVE)
@@ -426,11 +419,22 @@ void R_RotateForEntity (entity_t *ent, qboolean shadow)
 	else
 		lerpfrac = 1;
 
-	//translation
+	return lerpfrac;
+}
+
+void R_DoEntityTranslate(entity_t *ent, float lerpfrac)
+{
+	vec3_t	interpolated;
+
 	VectorInterpolate (ent->origin1, lerpfrac, ent->origin2, interpolated);
 	glTranslatef (interpolated[0], interpolated[1], interpolated[2]);
+}
 
-	//rotation
+void R_DoEntityRotate(entity_t *ent, float lerpfrac, qboolean shadow)
+{
+	int		i;
+	vec3_t	d;
+
 	VectorSubtract (ent->angles2, ent->angles1, d);
 
 	// always interpolate along the shortest path
@@ -472,10 +476,25 @@ void R_RotateForEntity (entity_t *ent, qboolean shadow)
 
 /*
 =============
-R_RotateForViewEntity
+R_RotateForEntityWithLerp
 =============
 */
-void R_RotateForViewEntity (entity_t *ent)
+void R_RotateForEntityWithLerp (entity_t *ent, qboolean shadow)
+{
+	float	lerpfrac;
+	
+	lerpfrac = R_CalculateLerpfracForEntity(ent);
+	
+	R_DoEntityTranslate(ent, lerpfrac);
+	R_DoEntityRotate(ent, lerpfrac, shadow);
+}
+
+/*
+=============
+R_RotateForEntity
+=============
+*/
+void R_RotateForEntity (entity_t *ent)
 {
 	glTranslatef (ent->origin[0], ent->origin[1], ent->origin[2]);
 
@@ -636,7 +655,8 @@ float	r_avertexnormal_dots[SHADEDOT_QUANT][256] =
 vec3_t	shadevector;
 float	*shadedots = r_avertexnormal_dots[0];
 
-qboolean	overbright; //johnfitz
+static qboolean	overbright; //johnfitz
+static qboolean shading = true; //johnfitz -- if false, disable vertex shading for various reasons (fullbright, r_lightmap, showtris, etc)
 
 float	apitch, ayaw;
 
@@ -658,6 +678,7 @@ static GLuint useFullbrightTexLoc;
 static GLuint useOverbrightLoc;
 static GLuint useAlphaTestLoc;
 static GLuint useWaterFogLoc;
+static GLuint vlightTableLoc;
 
 fog_data_t fog_data;
 
@@ -869,6 +890,7 @@ void GLAlias_CreateShaders(void)
 		// joe: bind uniform buffer here, only once
 		GLuint vlightDataLoc = qglGetUniformBlockIndex(r_alias_program, "VlightData");
 		qglUniformBlockBinding(r_alias_program, vlightDataLoc, 0);
+		vlightTableLoc = GL_GetUniformLocation(&r_alias_program, "VlightTable");
 	}
 }
 
@@ -888,6 +910,7 @@ Based on code by MH from RMQEngine
 */
 void R_DrawAliasFrame_GLSL(int frame, aliashdr_t *paliashdr, entity_t *ent, int distance, int gl_texture, int fb_texture, qboolean islumaskin)
 {
+	extern GLuint	tbo_tex;
 	int			posenum, numposes;
 
 	if ((frame >= paliashdr->numframes) || (frame < 0))
@@ -984,6 +1007,8 @@ void R_DrawAliasFrame_GLSL(int frame, aliashdr_t *paliashdr, entity_t *ent, int 
 	qglUniform1i(useAlphaTestLoc, (currententity->model->flags & MF_HOLEY) ? 1 : 0);
 	qglUniform1i(useWaterFogLoc, fog_data.useWaterFog);
 
+	qglUniform1i(vlightTableLoc, 2);
+
 	// set textures
 	GL_SelectTexture(GL_TEXTURE0);
 	GL_Bind(gl_texture);
@@ -992,6 +1017,12 @@ void R_DrawAliasFrame_GLSL(int frame, aliashdr_t *paliashdr, entity_t *ent, int 
 	{
 		GL_SelectTexture(GL_TEXTURE1);
 		GL_Bind(fb_texture);
+	}
+
+	if (gl_vertexlights.value && !full_light)
+	{
+		GL_SelectTexture(GL_TEXTURE2);
+		GL_BindTBO(tbo_tex);
 	}
 
 	// draw
@@ -1065,7 +1096,7 @@ void R_DrawAliasOutlineFrame(int frame, aliashdr_t *paliashdr, entity_t *ent, in
 
 	if ((frame >= paliashdr->numframes) || (frame < 0))
 	{
-		Con_DPrintf("R_DrawAliasFrame: no such frame %d\n", frame);
+		Con_DPrintf("R_DrawAliasOutlineFrame: no such frame %d\n", frame);
 		frame = 0;
 	}
 
@@ -1224,23 +1255,26 @@ void R_DrawAliasFrame (int frame, aliashdr_t *paliashdr, entity_t *ent, int dist
 
 			lerpfrac = VectorL2Compare(verts1->v, verts2->v, distance) ? ent->framelerp : 1;
 
-			// normals and vertexes come from the frame list
-			// blend the light intensity from the two frames together
-			if (gl_vertexlights.value && !full_light)
+			if (shading)
 			{
-				l = R_LerpVertexLight (anorm_pitch[verts1->lightnormalindex], anorm_yaw[verts1->lightnormalindex],
-							anorm_pitch[verts2->lightnormalindex], anorm_yaw[verts2->lightnormalindex], lerpfrac, apitch, ayaw);
-				l = min(l, 1);
+				// normals and vertexes come from the frame list
+				// blend the light intensity from the two frames together
+				if (gl_vertexlights.value && !full_light)
+				{
+					l = R_LerpVertexLight (anorm_pitch[verts1->lightnormalindex], anorm_yaw[verts1->lightnormalindex],
+						anorm_pitch[verts2->lightnormalindex], anorm_yaw[verts2->lightnormalindex], lerpfrac, apitch, ayaw);
+					l = min(l, 1);
 
-				for (i = 0 ; i < 3 ; i++)
-					lightvec[i] = lightcolor[i] * (200.0 / 256.0) + l;
+					for (i = 0 ; i < 3 ; i++)
+						lightvec[i] = lightcolor[i] * (200.0 / 256.0) + l;
+				}
+				else
+				{
+					l = FloatInterpolate (shadedots[verts1->lightnormalindex], lerpfrac, shadedots[verts2->lightnormalindex]);
+					VectorScale(lightcolor, l, lightvec);
+				}
+				glColor4f(lightvec[0], lightvec[1], lightvec[2], ent->transparency);
 			}
-			else
-			{
-				l = FloatInterpolate (shadedots[verts1->lightnormalindex], lerpfrac, shadedots[verts2->lightnormalindex]);
-				VectorScale(lightcolor, l, lightvec);
-			}
-			glColor4f(lightvec[0], lightvec[1], lightvec[2], ent->transparency);
 
 			VectorInterpolate (verts1->v, lerpfrac, verts2->v, interpolated_verts);
 			glVertex3fv (interpolated_verts);
@@ -1555,6 +1589,13 @@ void R_SetupInterpolateDistance (entity_t *ent, aliashdr_t *paliashdr, int *dist
 	}
 }
 
+//johnfitz -- values for shadow matrix
+#define SHADOW_SKEW_X -0.7 //skew along x axis. -0.7 to mimic glquake shadows
+#define SHADOW_SKEW_Y 0 //skew along y axis. 0 to mimic glquake shadows
+#define SHADOW_VSCALE 0 //0=completely flat
+#define SHADOW_HEIGHT 0.1 //how far above the floor to render the shadow
+//johnfitz
+
 /*
 =================
 R_DrawAliasModel
@@ -1578,6 +1619,7 @@ void R_DrawAliasModel (entity_t *ent)
 	VectorSubtract (r_origin, r_entorigin, modelorg);
 
 	overbright = gl_overbright_models.value;
+	shading = true;
 
 	// get lighting information
 	R_SetupLighting (ent);
@@ -1590,13 +1632,12 @@ void R_DrawAliasModel (entity_t *ent)
 	R_SetupInterpolateDistance (ent, paliashdr, &distance);
 
 	// draw all the triangles
-
 	glPushMatrix ();
 
 	if (ent == &cl.viewent || clmodel->modhint == MOD_FLAME)
-		R_RotateForViewEntity (ent);
+		R_RotateForEntity (ent);
 	else
-		R_RotateForEntity (ent, false);
+		R_RotateForEntityWithLerp (ent, false);
 
 	scalefactor = ENTSCALE_DECODE(ent->scale);
 	if (scalefactor != 1.0f)
@@ -1612,14 +1653,20 @@ void R_DrawAliasModel (entity_t *ent)
 	}
 	else if (ent == &cl.viewent)
 	{
-		float scale = 1;
-		int hand_offset = cl_hand.value == 1 ? -3 : cl_hand.value == 2 ? 3 : 0;
-		extern cvar_t scr_fov;
+		float	scale = 1.0f, fovscale = 1.0f;
+		int		hand_offset = cl_hand.value == 1 ? -3 : cl_hand.value == 2 ? 3 : 0;
+		extern cvar_t scr_fov, cl_gun_fovscale;
 
-		glTranslatef (paliashdr->scale_origin[0], paliashdr->scale_origin[1] + hand_offset, paliashdr->scale_origin[2]);
+		if (scr_fov.value > 90.f && cl_gun_fovscale.value)
+		{
+			fovscale = tan(scr_fov.value * (0.5f * M_PI / 180.f));
+			fovscale = 1.f + (fovscale - 1.f) * cl_gun_fovscale.value;
+		}
+
+		glTranslatef (paliashdr->scale_origin[0], (paliashdr->scale_origin[1] * fovscale) + hand_offset, paliashdr->scale_origin[2] * fovscale);
 
 		scale = (scr_fov.value > 90) ? 1 - ((scr_fov.value - 90) / 250) : 1;
-		glScalef (paliashdr->scale[0] * scale, paliashdr->scale[1], paliashdr->scale[2]);
+		glScalef (paliashdr->scale[0] * scale, paliashdr->scale[1] * fovscale, paliashdr->scale[2] * fovscale);
 	}
 	else
 	{
@@ -1800,12 +1847,25 @@ void R_DrawAliasModel (entity_t *ent)
 		int		farclip;
 		vec3_t	downmove;
 		trace_t	downtrace;
+		float	shadowmatrix[16] = {1,				0,				0,				0,
+									0,				1,				0,				0,
+									SHADOW_SKEW_X,	SHADOW_SKEW_Y,	SHADOW_VSCALE,	0,
+									0,				0,				SHADOW_HEIGHT,	1};
+		float	lheight, lerpfrac;
 
+		lheight = ent->origin[2] - lightspot[2];
 		farclip = max((int)r_farclip.value, 4096);
+		lerpfrac = R_CalculateLerpfracForEntity(ent);
 
 		glPushMatrix ();
 
-		R_RotateForEntity (ent, true);
+		R_DoEntityTranslate (ent, lerpfrac);
+		glTranslatef (0, 0, -lheight);
+		glMultMatrixf (shadowmatrix);
+		glTranslatef (0, 0, lheight);
+		R_DoEntityRotate (ent, lerpfrac, true);
+		glTranslatef (paliashdr->scale_origin[0], paliashdr->scale_origin[1], paliashdr->scale_origin[2]);
+		glScalef (paliashdr->scale[0], paliashdr->scale[1], paliashdr->scale[2]);
 
 		VectorCopy (ent->origin, downmove);
 		downmove[2] -= farclip;
@@ -1815,7 +1875,7 @@ void R_DrawAliasModel (entity_t *ent)
 		glDepthMask (GL_FALSE);
 		glDisable (GL_TEXTURE_2D);
 		glEnable (GL_BLEND);
-		glColor4f (0, 0, 0, ((MaxLightColor() * 200.0f) - (mins[2] - downtrace.endpos[2])) / 150);
+		glColor4f (0, 0, 0, ((MaxLightColor() * 150.0f) - (mins[2] - downtrace.endpos[2])) / 150);
 		if (gl_have_stencil && r_shadows.value == 2)
 		{
 			glEnable (GL_STENCIL_TEST);
@@ -1823,7 +1883,8 @@ void R_DrawAliasModel (entity_t *ent)
 			glStencilOp (GL_KEEP, GL_KEEP, GL_INCR);
 		}
 
-		R_DrawAliasShadow (paliashdr, ent, distance, downtrace);
+		shading = false;
+		R_DrawAliasFrame (ent->frame, paliashdr, ent, distance);
 
 		glDepthMask (GL_TRUE);
 		glEnable (GL_TEXTURE_2D);
@@ -2317,22 +2378,23 @@ void R_DrawQ3Frame (int frame, md3header_t *pmd3hdr, md3surface_t *pmd3surf, ent
 /*
 =================
 R_DrawQ3Shadow
+
+TODO: merge this once with R_SetupQ3Frame/R_DrawQ3Frame
 =================
 */
-void R_DrawQ3Shadow (entity_t *ent, float lheight, float s1, float c1, trace_t downtrace)
+void R_DrawQ3Shadow (entity_t *ent, int distance)
 {
 	int			i, j, numtris, pose1, pose2;
-	vec3_t		point1, point2, interpolated;
+	vec3_t		interpolated;
 	md3header_t	*pmd3hdr;
 	md3surface_t *pmd3surf;
 	unsigned int *tris;
 	md3vert_mem_t *verts;
 	model_t		*clmodel = ent->model;
-#if 0
 	float		m[16];
 	md3tag_t	*tag;
 	tagentity_t	*tagent;
-#endif
+	entity_t	*newent;
 
 	pmd3hdr = (md3header_t *)Mod_Extradata (clmodel);
 
@@ -2348,27 +2410,15 @@ void R_DrawQ3Shadow (entity_t *ent, float lheight, float s1, float c1, trace_t d
 		glBegin (GL_TRIANGLES);
 		for (j = 0 ; j < numtris ; j++)
 		{
-			// normals and vertexes come from the frame list
-			VectorCopy (verts[*tris+pose1].vec, point1);
+			md3vert_mem_t *v1, *v2;
+			float lerpfrac;
 
-			point1[0] -= shadevector[0] * (point1[2] + lheight);
-			point1[1] -= shadevector[1] * (point1[2] + lheight);
+			v1 = verts + *tris + pose1;
+			v2 = verts + *tris + pose2;
 
-			VectorCopy (verts[*tris+pose2].vec, point2);
+			lerpfrac = VectorL2Compare(v1->vec, v2->vec, distance) ? ent->framelerp : 1;
 
-			point2[0] -= shadevector[0] * (point2[2] + lheight);
-			point2[1] -= shadevector[1] * (point2[2] + lheight);
-
-			VectorInterpolate (point1, ent->framelerp, point2, interpolated);
-
-			interpolated[2] = -(ent->origin[2] - downtrace.endpos[2]);
-
-			interpolated[2] += ((interpolated[1] * (s1 * downtrace.plane.normal[0])) - 
-								(interpolated[0] * (c1 * downtrace.plane.normal[0])) - 
-								(interpolated[0] * (s1 * downtrace.plane.normal[1])) - 
-								(interpolated[1] * (c1 * downtrace.plane.normal[1]))) + 
-								((1 - downtrace.plane.normal[2]) * 20) + 0.2;
-
+			VectorInterpolate (v1->vec, lerpfrac, v2->vec, interpolated);
 			glVertex3fv (interpolated);
 
 			*tris++;
@@ -2381,8 +2431,6 @@ void R_DrawQ3Shadow (entity_t *ent, float lheight, float s1, float c1, trace_t d
 	if (!pmd3hdr->numtags)	// single model, done
 		return;
 
-// no multimodel shadow support yet
-#if 0
 	tag = (md3tag_t *)((byte *)pmd3hdr + pmd3hdr->ofstags);
 	tag += ent->pose2 * pmd3hdr->numtags;
 	for (i = 0 ; i < pmd3hdr->numtags ; i++, tag++)
@@ -2390,25 +2438,55 @@ void R_DrawQ3Shadow (entity_t *ent, float lheight, float s1, float c1, trace_t d
 		if (ent->modelindex == cl_modelindex[mi_q3legs] && !strcmp(tag->name, "tag_torso"))
 		{
 			tagent = &q3player_body;
-			ent = &q3player_body.ent;
+			newent = &q3player_body.ent;
 		}
 		else if (ent->modelindex == cl_modelindex[mi_q3torso] && !strcmp(tag->name, "tag_head"))
 		{
 			tagent = &q3player_head;
-			ent = &q3player_head.ent;
+			newent = &q3player_head.ent;
+		}
+		else if ((ent->modelindex == cl_modelindex[mi_q3torso] || ent->model->modhint == MOD_WEAPON) &&	// MOD_WEAPON check is needed for hand model tag
+			!strcmp(tag->name, "tag_weapon"))
+		{
+			int gwep_modelindex;
+			extern void GetQuake3ViewWeaponModel(int *);
+
+			tagent = &q3player_weapon;
+			newent = &q3player_weapon.ent;
+
+			GetQuake3ViewWeaponModel(&gwep_modelindex);
+			if (gwep_modelindex != -1)
+			{
+				if (cl_modelindex[gwep_modelindex] != -1)
+				{
+					newent->model = cl.model_precache[cl_modelindex[gwep_modelindex]];
+					newent->modelindex = cl_modelindex[gwep_modelindex];
+				}
+				else
+				{
+					// the model is not precached, so load it just now
+					newent->model = Mod_ForName(cl_modelnames[gwep_modelindex], false);
+				}
+			}
+			else
+			{
+				continue;
+			}
 		}
 		else
 		{
 			continue;
 		}
 
-		glPushMatrix ();
-		R_RotateForTagEntity (tagent, tag, m);
-		glMultMatrixf (m);
-		R_DrawQ3Shadow (ent, lheight, s1, c1, downtrace);
-		glPopMatrix ();
+		if (newent->model)
+		{
+			glPushMatrix();
+			R_RotateForTagEntity(tagent, tag, m, ent->frame_interval);
+			glMultMatrixf(m);
+			R_DrawQ3Shadow(newent, distance);
+			glPopMatrix();
+		}
 	}
-#endif
 }
 
 #define	ADD_EXTRA_TEXTURE(_texture, _param)					\
@@ -2599,24 +2677,24 @@ void R_SetupQ3Frame (entity_t *ent)
 			continue;
 		}
 
-		glPushMatrix ();
-
-		R_RotateForTagEntity (tagent, tag, m, ent->frame_interval);
-		glMultMatrixf (m);
-
-		// apply pitch rotation from the torso model
-		if (ent->modelindex == cl_modelindex[mi_q3legs])
-		{
-			glRotatef(pitch_rot, 0, 1, 0);
-#if 0
-			glRotatef(-q3legs_rot, 0, 1, 0);
-#endif
-		}
-
 		if (newent->model)
-			R_SetupQ3Frame (newent);
+		{
+			glPushMatrix();
+			R_RotateForTagEntity(tagent, tag, m, ent->frame_interval);
+			glMultMatrixf(m);
 
-		glPopMatrix ();
+			// apply pitch rotation from the torso model
+			if (ent->modelindex == cl_modelindex[mi_q3legs])
+			{
+				glRotatef(pitch_rot, 0, 1, 0);
+#if 0
+				glRotatef(-q3legs_rot, 0, 1, 0);
+#endif
+			}
+
+			R_SetupQ3Frame(newent);
+			glPopMatrix();
+		}
 	}
 }
 
@@ -2661,9 +2739,9 @@ void R_DrawQ3Model (entity_t *ent)
 	glPushMatrix ();
 
 	if (ent == &cl.viewent)
-		R_RotateForViewEntity (ent);
+		R_RotateForEntity (ent);
 	else
-		R_RotateForEntity (ent, false);
+		R_RotateForEntityWithLerp (ent, false);
 
 	scalefactor = ENTSCALE_DECODE(ent->scale);
 	if (scalefactor != 1.0f)
@@ -2706,10 +2784,7 @@ void R_DrawQ3Model (entity_t *ent)
 		glHint (GL_PERSPECTIVE_CORRECTION_HINT, GL_FASTEST);
 
 	if (!strcmp(clmodel->name, cl_modelnames[mi_q3legs]))
-	{
 		R_ReplaceQ3Frame (ent->frame);
-		ent->noshadow = true;
-	}
 
 	R_SetupQ3Frame (ent);
 
@@ -2721,31 +2796,36 @@ void R_DrawQ3Model (entity_t *ent)
 
 	if (r_shadows.value && !ent->noshadow)
 	{
-		int			farclip;
-		float		lheight, s1, c1;
-		vec3_t		downmove;
-		trace_t		downtrace;
+		int		farclip;
+		vec3_t	downmove;
+		trace_t	downtrace;
+		float	shadowmatrix[16] = {1,				0,				0,				0,
+									0,				1,				0,				0,
+									SHADOW_SKEW_X,	SHADOW_SKEW_Y,	SHADOW_VSCALE,	0,
+									0,				0,				SHADOW_HEIGHT,	1};
+		float	lheight, lerpfrac;
 
+		lheight = ent->origin[2] - lightspot[2];
 		farclip = max((int)r_farclip.value, 4096);
+		lerpfrac = R_CalculateLerpfracForEntity(ent);
 
 		glPushMatrix ();
 
-		R_RotateForEntity (ent, true);
+		R_DoEntityTranslate (ent, lerpfrac);
+		glTranslatef (0, 0, -lheight);
+		glMultMatrixf (shadowmatrix);
+		glTranslatef (0, 0, lheight);
+		R_DoEntityRotate (ent, lerpfrac, true);
 
 		VectorCopy (ent->origin, downmove);
 		downmove[2] -= farclip;
 		memset (&downtrace, 0, sizeof(downtrace));
 		SV_RecursiveHullCheck (cl.worldmodel->hulls, 0, 0, 1, ent->origin, downmove, &downtrace);
 
-		lheight = ent->origin[2] - lightspot[2];
-
-		s1 = sin(ent->angles[1] / 180 * M_PI);
-		c1 = cos(ent->angles[1] / 180 * M_PI);
-
 		glDepthMask (GL_FALSE);
 		glDisable (GL_TEXTURE_2D);
 		glEnable (GL_BLEND);
-		glColor4f (0, 0, 0, ((MaxLightColor() * 200.0f) - (mins[2] - downtrace.endpos[2])) / 150);
+		glColor4f (0, 0, 0, ((MaxLightColor() * 150.0f) - (mins[2] - downtrace.endpos[2])) / 150);
 		if (gl_have_stencil && r_shadows.value == 2) 
 		{
 			glEnable (GL_STENCIL_TEST);
@@ -2753,7 +2833,7 @@ void R_DrawQ3Model (entity_t *ent)
 			glStencilOp (GL_KEEP, GL_KEEP, GL_INCR);
 		}
 
-		R_DrawQ3Shadow (ent, lheight, s1, c1, downtrace);
+		R_DrawQ3Shadow (ent, INTERP_MAXDIST);
 
 		glDepthMask (GL_TRUE);
 		glEnable (GL_TEXTURE_2D);

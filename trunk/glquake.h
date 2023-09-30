@@ -265,6 +265,7 @@ extern	const	char	*gl_version;
 extern	const	char	*gl_extensions;
 
 void GL_Bind (int texnum);
+void GL_BindTBO (int texnum);
 
 // Generate mipmaps
 typedef void (APIENTRY *lpGenerateMipmapFUNC)(GLenum);
@@ -393,6 +394,9 @@ void R_DrawSky(void);
 void R_InitSky(texture_t *mt);		// called at level load
 void R_UpdateWarpTextures(void);
 extern int gl_warpimagesize;
+
+#define TURBSINSIZE 128
+extern int turbsin[TURBSINSIZE];
 
 // gl_draw.c
 extern	cvar_t	gl_texturemode;
