@@ -1,4 +1,30 @@
-﻿
+﻿## JoeQuake SDL Linux fork
+
+This is a fork of
+[Joe's JoeQuake repository](https://github.com/j0zzz/JoeQuake), the speedrunning
+focused Quake engine.  It adds files to allow building the SDL version of
+JoeQuake on Linux.  To build run the following from the repository root:
+
+```bash
+# TODO:  Add steps for installing dependencies.
+mkdir build
+cd build
+cmake ..
+make
+# binary is written to `<repo root>/build/trunk/joequake-gl`
+```
+
+Further documentation:
+- [Guide for SDL specific JoeQuake features](SDL.md)
+
+
+This branch is heavily based on
+[Sphere's Linux fork of JoeQuake](https://github.com/kugelrund/JoeQuake/tree/linux).
+
+The original JoeQuake README is below.
+
+---
+
 ## Description
 
 This is a custom Quake engine designed exclusively for speedrunning.
