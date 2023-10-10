@@ -69,6 +69,7 @@ int	sbar_xofs;
 cvar_t	scr_centersbar = {"scr_centersbar", "1"};
 cvar_t	scr_sbarscale_amount = { "scr_sbarscale_amount", "2" };
 cvar_t	scr_scorebarmode = { "scr_scorebarmode", "0" };
+cvar_t	scr_precisetime = { "scr_precisetime", "0", CVAR_ARCHIVE };
 
 /*
 ===============
@@ -274,6 +275,7 @@ void Sbar_Init (void)
 	Cvar_Register (&scr_centersbar);
 	Cvar_Register (&scr_sbarscale_amount);
 	Cvar_Register(&scr_scorebarmode);
+	Cvar_Register(&scr_precisetime);
 
 	Cmd_AddCommand ("+showscores", Sbar_ShowScores);
 	Cmd_AddCommand ("-showscores", Sbar_DontShowScores);
@@ -1457,8 +1459,16 @@ Sbar_IntermissionOverlay
 void Sbar_IntermissionOverlay (void)
 {
 	mpic_t	*pic;
-	int		dig, num, xofs, pos;
+	int		dig, num, xofs, pos, i;
+	int precision;
 	float	scale;
+	double frac;
+	char fracstring[9];
+
+	if (scr_precisetime.value)
+		precision = 2;
+	else
+		precision = 0;
 
 	scr_copyeverything = 1;
 	scr_fullupdate = 0;
@@ -1480,11 +1490,27 @@ void Sbar_IntermissionOverlay (void)
 
 	// time
 	dig = cl.completed_time / 60;
-	Sbar_IntermissionNumber (xofs + (int)(160 * scale), (int)(64 * scale), dig, 3, 0);
+	if (precision > 0) {
+		pos = 168 - precision * 24;
+	} else {
+		pos = 160;
+	}
+	Sbar_IntermissionNumber (xofs + (int)(pos * scale), (int)(64 * scale), dig, 3, 0); pos += 24 * 3 + 2;
 	num = cl.completed_time - dig * 60;
-	Draw_TransPic (xofs + (int)(234 * scale), (int)(64 * scale), sb_colon, true);
-	Draw_TransPic (xofs + (int)(246 * scale), (int)(64 * scale), sb_nums[0][num/10], true);
-	Draw_TransPic (xofs + (int)(266 * scale), (int)(64 * scale), sb_nums[0][num%10], true);
+	Draw_TransPic (xofs + (int)(pos * scale), (int)(64 * scale), sb_colon, true); pos += 12;
+	Draw_TransPic (xofs + (int)(pos * scale), (int)(64 * scale), sb_nums[0][num/10], true); pos += 20;
+	Draw_TransPic (xofs + (int)(pos * scale), (int)(64 * scale), sb_nums[0][num%10], true); pos += 20;
+	if (precision > 0)
+	{
+		frac = cl.completed_time - (int)cl.completed_time;
+		frac = bound(0.000005, frac, 0.999995);
+		Q_snprintfz(fracstring, sizeof(fracstring), "%.6f", frac);
+
+		pos += 6;
+		Draw_TransPic (xofs + (int)(pos  * scale), (int)(64 * scale), sb_colon, true); pos += 12;
+		for (i = 0; i < precision; pos += 24, i++)
+			Draw_TransPic (xofs + (int)(pos * scale), (int)(64 * scale), sb_nums[0][fracstring[i + 2] - '0'], true);
+	}
 
 	// secrets
 	Sbar_IntermissionNumber (xofs + (int)(160 * scale), (int)(104 * scale), cl.stats[STAT_SECRETS], 3, 0);

@@ -33,12 +33,12 @@ static cvar_t ghost_bar_alpha = { "ghost_bar_alpha", "0.8", CVAR_ARCHIVE };
 
 
 static dzip_context_t ghost_dz_ctx;
+static ghost_info_t *ghost_info = NULL;
 char                ghost_demo_path[MAX_OSPATH] = "";
-static ghostrec_t   *ghost_records = NULL;
-static int          ghost_num_records = 0;
-entity_t			*ghost_entity = NULL;
+static char         ghost_map_name[MAX_QPATH];
+static ghost_level_t *ghost_current_level = NULL;
+entity_t            ghost_entity;
 static float        ghost_shift = 0.0f;
-static float        ghost_finish_time = -1.0f;
 static int          ghost_model_indices[GHOST_MODEL_COUNT];
 static float        ghost_last_relative_time = 0.0f;
 static demo_summary_t ghost_demo_summary;
@@ -52,18 +52,19 @@ const char *ghost_model_paths[GHOST_MODEL_COUNT] = {
 #define MAX_MARATHON_LEVELS     256
 typedef struct {
     char map_name[MAX_QPATH];
-    float ghost_time;
+    float ghost_time;       // -1 if no time for current ghost
     float player_time;
 } ghost_marathon_level_t;
 typedef struct {
     qboolean valid;         // has there been a ghost time for each level?
     ghost_marathon_level_t levels[MAX_MARATHON_LEVELS];
     float total_split;
-    int num_levels;
+    int ghost_start;
 } ghost_marathon_info_t;
 static ghost_marathon_info_t ghost_marathon_info;
 
 ghost_color_info_t ghost_color_info[GHOST_MAX_CLIENTS];
+extern char *GetPrintedTime(double time);   // Maybe put the definition somewhere central?
 
 
 // This could be done more intelligently, no doubt.
@@ -79,8 +80,8 @@ static float Ghost_FindClosest (vec3_t origin, qboolean *match)
     // Ignore any matches that are not close by.
     closest_dist_sqr = 256.0f * 256.0f;
 
-    for (idx = 0, rec = ghost_records;
-         idx < ghost_num_records;
+    for (idx = 0, rec = ghost_current_level->records;
+         idx < ghost_current_level->num_records;
          rec++, idx++) {
         VectorSubtract(origin, rec->origin, diff);
 
@@ -110,13 +111,13 @@ static int Ghost_FindRecord (float time)
     int idx;
     ghostrec_t *rec;
 
-    if (ghost_records == NULL) {
+    if (ghost_current_level == NULL) {
         // not loaded
         return -1;
     }
 
-    for (idx = 0, rec = ghost_records;
-         idx < ghost_num_records && time > rec->time;
+    for (idx = 0, rec = ghost_current_level->records;
+         idx < ghost_current_level->num_records && time > rec->time;
          idx++, rec++);
 
     if (idx == 0) {
@@ -124,7 +125,7 @@ static int Ghost_FindRecord (float time)
         return -1;
     }
 
-    if (idx == ghost_num_records) {
+    if (idx == ghost_current_level->num_records) {
         // gone beyond the last record
         return -1;
     }
@@ -163,7 +164,7 @@ Ghost_OpenDemoOrDzip (const char *demo_path)
         Q_strlcpy(demo_path_with_ext, demo_path, MAX_OSPATH);
         COM_DefaultExtension (demo_path_with_ext, ".dem");
         if (COM_FOpenFile (demo_path_with_ext, &demo_file) == -1) {
-            Con_Printf("cannot find demo %s", demo_path_with_ext);
+            Con_Printf("cannot find demo %s\n", demo_path_with_ext);
             demo_file = NULL;
         }
     }
@@ -172,73 +173,160 @@ Ghost_OpenDemoOrDzip (const char *demo_path)
 }
 
 
-static qboolean first_update;
+// Update the ghost times in the ghost marathon info.  Called on intermission or
+// when the ghost is changed.
+static void Ghost_UpdateMarathon (void)
+{
+    int i, j;
+    ghost_level_t *gl;
+    ghost_marathon_level_t *gml;
+    ghost_marathon_info_t *gmi = &ghost_marathon_info;
 
-extern char *GetPrintedTime(double time);   // Maybe put the definition somewhere central?
-void Ghost_Load (const char *map_name)
+    gmi->valid = true;
+    gmi->total_split = 0.0f;
+    for (i = 0; i < cls.marathon_level && i < MAX_MARATHON_LEVELS; i++) {
+        gml = &gmi->levels[i];
+
+        gml->ghost_time = -1.0f;
+        for (j = 0; j < ghost_info->num_levels; j++) {
+            gl = &ghost_info->levels[j];
+            if (strcmp(gl->map_name, gml->map_name) == 0
+                    && gl->finish_time > 0) {
+                gml->ghost_time = gl->finish_time;
+                break;
+            }
+        }
+        if (gml->ghost_time < 0.0) {
+            gmi->valid = false;
+        } else {
+            gmi->total_split += (gml->player_time - gml->ghost_time);
+        }
+    }
+}
+
+
+static void Ghost_PrintMarathonSplits (void)
+{
+    float split, total_split;
+    int i;
+    ghost_marathon_level_t *gml;
+    ghost_marathon_info_t *gmi = &ghost_marathon_info;
+
+    if (gmi->valid && cls.marathon_level > 0) {
+        Con_Printf("ghost splits:\n");
+        Con_Printf("  map                time    split    total\n");
+        Con_Printf("  \x9d\x9e\x9e\x9e\x9e\x9e\x9e\x9e\x9e\x9f "
+                   "\x9d\x9e\x9e\x9e\x9e\x9e\x9e\x9e\x9e\x9e\x9e\x9f "
+                   "\x9d\x9e\x9e\x9e\x9e\x9e\x9e\x9f "
+                   "\x9d\x9e\x9e\x9e\x9e\x9e\x9e\x9f\n");
+        total_split = 0.0f;
+        for (i = gmi->ghost_start;
+                i < cls.marathon_level && i < MAX_MARATHON_LEVELS;
+                i++) {
+            gml = &gmi->levels[i];
+            split = gml->player_time - gml->ghost_time;
+            total_split += split;
+            Con_Printf("  %-10s %12s %+8.2f %+8.2f\n",
+                       gml->map_name,
+                       GetPrintedTime(gml->player_time),
+                       split,
+                       total_split);
+        }
+    }
+}
+
+
+static void Ghost_PrintLevelLoadInfo (void)
 {
     int i;
-    ghost_info_t ghost_info;
-    FILE *demo_file;
 
-    memset(&ghost_info, 0, sizeof(ghost_info));
-    ghost_records = NULL;
-    ghost_num_records = 0;
-    ghost_entity = NULL;
-    ghost_finish_time = -1.0f;
-
-    if (ghost_demo_path[0] == '\0') {
+    if (ghost_current_level == NULL) {
         return;
     }
-
-    demo_file = Ghost_OpenDemoOrDzip(ghost_demo_path);
-    if (!demo_file)
-    {
-        Con_Printf ("ERROR: couldn't open %s\n", ghost_demo_path);
-        return;
-    }
-    if (!Ghost_ReadDemo(demo_file, &ghost_info, map_name)) {
-        return;
-    }
-    ghost_records = ghost_info.records;
-    ghost_num_records = ghost_info.num_records;
-    memcpy(ghost_model_indices,
-           ghost_info.model_indices,
-           sizeof(ghost_info.model_indices));
 
     // Print player names
     Con_Printf("Ghost player(s): ");
     for (i = 0; i < GHOST_MAX_CLIENTS; i++) {
-        if (ghost_info.client_names[i][0] != '\0') {
-            Con_Printf(" %s ", ghost_info.client_names[i]);
+        if (ghost_current_level->client_names[i][0] != '\0') {
+            Con_Printf(" %s ", ghost_current_level->client_names[i]);
         }
-        ghost_color_info[i].colors = ghost_info.client_colors[i];
     }
     Con_Printf("\n");
 
     // Print finish time
-    ghost_finish_time = ghost_info.finish_time;
-    if (ghost_info.finish_time > 0) {
-        Con_Printf("Ghost time:       %s\n", GetPrintedTime(ghost_info.finish_time));
+    if (ghost_current_level->finish_time > 0) {
+        Con_Printf("Ghost time:       %s\n",
+                   GetPrintedTime(ghost_current_level->finish_time));
     }
 
-    ghost_entity = (entity_t *)Hunk_AllocName(sizeof(entity_t),
-                                              "ghost_entity");
+}
 
-    ghost_entity->skinnum = 0;
-    ghost_entity->modelindex = -1;
-    ghost_entity->translate_start_time = 0.0f;
-    ghost_entity->frame_start_time = 0.0f;
-    ghost_entity->scale = ENTSCALE_DEFAULT;
+
+static qboolean first_update;
+
+// Set up the ghost for the current level.
+//    Return true iff a different ghost was loaded.
+static qboolean Ghost_SetForLevel (void)
+{
+    int i;
+    ghost_level_t *level;
+
+    if (ghost_demo_path[0] == '\0') {
+        return false;
+    }
+    if (strncmp(ghost_map_name, CL_MapName(), MAX_QPATH) == 0) {
+        return false;
+    }
+    Q_strncpyz(ghost_map_name, CL_MapName(), MAX_QPATH);
+    if (ghost_map_name[0] == '\0') {
+        return false;
+    }
+
+    ghost_current_level = NULL;
+
+    if (ghost_demo_path[0] == '\0') {
+        if (ghost_info != NULL) {
+            Sys_Error("ghost_demo_path empty but ghost_info is not NULL");
+        }
+        return false;
+    }
+    if (ghost_info == NULL) {
+        Sys_Error("ghost_demo_path not empty but ghost info is NULL");
+    }
+
+    for (i = 0; i < ghost_info->num_levels; i++) {
+        level = &ghost_info->levels[i];
+        if (strcmp(ghost_map_name, level->map_name) == 0) {
+            break;
+        }
+    }
+    if (i >= ghost_info->num_levels) {
+        Con_Printf("Map %s not found in ghost demo\n", ghost_map_name);
+        return false;
+    }
+
+    ghost_current_level = level;
+    memcpy(ghost_model_indices,
+           level->model_indices,
+           sizeof(level->model_indices));
+
+    // Set the colours for each ghost.
+    for (i = 0; i < GHOST_MAX_CLIENTS; i++) {
+        ghost_color_info[i].colors = level->client_colors[i];
+    }
+
+    ghost_entity.skinnum = 0;
+    ghost_entity.modelindex = -1;
+    ghost_entity.translate_start_time = 0.0f;
+    ghost_entity.frame_start_time = 0.0f;
+    ghost_entity.scale = ENTSCALE_DEFAULT;
 
     ghost_shift = 0.0f;
     ghost_last_relative_time = 0.0f;
-    if ((!sv.active && !cls.demoplayback) || cls.marathon_level == 0) {
-        ghost_marathon_info.total_split = 0.0f;
-        ghost_marathon_info.num_levels = 0;
-    }
 
     first_update = true;
+
+    return true;
 }
 
 
@@ -280,7 +368,7 @@ static qboolean Ghost_SetAlpha(void)
     float dist;
 
     // distance from player to ghost
-    VectorSubtract(ent->origin, ghost_entity->origin, diff);
+    VectorSubtract(ent->origin, ghost_entity.origin, diff);
     dist = VectorLength(diff);
 
     // fully opaque at range+64, fully transparent at range
@@ -289,7 +377,7 @@ static qboolean Ghost_SetAlpha(void)
     // scale by cvar alpha
     alpha *= bound(0.0f, ghost_alpha.value, 1.0f);
 
-    ghost_entity->transparency = alpha;
+    ghost_entity.transparency = alpha;
 
     return alpha != 0.0f;
 }
@@ -308,24 +396,24 @@ static qboolean Ghost_Update (void)
     ghost_show = (after_idx != -1);
 
     if (ghost_show) {
-        rec_after = &ghost_records[after_idx];
-        rec_before = &ghost_records[after_idx - 1];
+        rec_after = &ghost_current_level->records[after_idx];
+        rec_before = &ghost_current_level->records[after_idx - 1];
 
         ghost_show = false;
         for (i = 0; !ghost_show && i < GHOST_MODEL_COUNT; i++) {
             if (ghost_model_indices[i] != 0
                     && rec_after->model == ghost_model_indices[i]) {
                 ghost_show = true;
-                ghost_entity->model = Mod_ForName((char *)ghost_model_paths[i],
+                ghost_entity.model = Mod_ForName((char *)ghost_model_paths[i],
                                                   false);
                 if (first_update) {
                     CL_NewTranslation(clientnum, true);
                     first_update = false;
                 }
                 if (i == GHOST_MODEL_PLAYER)
-                    ghost_entity->colormap = ghost_color_info[clientnum].translations;
+                    ghost_entity.colormap = ghost_color_info[clientnum].translations;
                 else
-                    ghost_entity->colormap = vid.colormap;  // eyes, head
+                    ghost_entity.colormap = vid.colormap;  // eyes, head
             }
         }
     }
@@ -335,14 +423,14 @@ static qboolean Ghost_Update (void)
                 / (rec_after->time - rec_before->time);
 
         // TODO: lerp animation frames
-        ghost_entity->frame = rec_after->frame;
+        ghost_entity.frame = rec_after->frame;
 
         Ghost_LerpOrigin(rec_before->origin, rec_after->origin,
                          frac,
-                         ghost_entity->origin);
+                         ghost_entity.origin);
         Ghost_LerpAngle(rec_before->angle, rec_after->angle,
                         frac,
-                        ghost_entity->angles);
+                        ghost_entity.angles);
 
         // Set alpha based on distance to player.
         ghost_show = Ghost_SetAlpha();
@@ -352,9 +440,20 @@ static qboolean Ghost_Update (void)
 }
 
 
+void Ghost_Load (void)
+{
+    Ghost_SetForLevel();
+    Ghost_PrintLevelLoadInfo();
+}
+
 void R_DrawAliasModel (entity_t *ent);
 void Ghost_Draw (void)
 {
+    if (Ghost_SetForLevel()) {
+        Con_Printf("\n");
+        Ghost_PrintLevelLoadInfo();
+    }
+
     /*
      * These attributes are required by R_DrawAliasModel:
      *  - model
@@ -367,8 +466,8 @@ void Ghost_Draw (void)
      *  - frame
      */
     if (Ghost_Update()) {
-        currententity = ghost_entity;
-        R_DrawAliasModel (ghost_entity);
+        currententity = &ghost_entity;
+        R_DrawAliasModel (&ghost_entity);
     }
 }
 
@@ -600,7 +699,10 @@ static void Ghost_DrawIntermissionTimes (void)
     min_y = ((cl.intermission == 2) ? 182 : 174) * scale;
 
     total = gmi->total_split;
-    for (i = gmi->num_levels - 1; i >= 0; i--) {
+    for (i = cls.marathon_level - 1; i >= 0; i--) {
+        if (i >= MAX_MARATHON_LEVELS) {
+            continue;
+        }
         y -= 2 * size;
         if (y <= min_y) {
             break;
@@ -620,7 +722,7 @@ static void Ghost_DrawIntermissionTimes (void)
             Q_snprintfz (st, sizeof(st), "%s", RedString("Total"));
         }
 
-        if (gmi->num_levels > 1) {
+        if (cls.marathon_level > 1) {
             x = ((vid.width + (int)(184 * scale)) / 2) + (ghost_bar_x.value * size);
             Draw_String (x, y, st, true);
         }
@@ -636,7 +738,7 @@ void Ghost_DrawGhostTime (qboolean intermission)
     qboolean match;
     entity_t *ent;
 
-    if (!ghost_delta.value || ghost_records == NULL)
+    if (!ghost_delta.value || ghost_current_level == NULL)
         return;
 
     if (!intermission) {
@@ -644,7 +746,7 @@ void Ghost_DrawGhostTime (qboolean intermission)
             return;
         }
         ent = &cl_entities[cl.viewentity];
-        if (!ghost_delta.value || ghost_records == NULL)
+        if (!ghost_delta.value || ghost_current_level == NULL)
             return;
         relative_time = Ghost_FindClosest(ent->origin, &match);
         if (!match)
@@ -677,55 +779,20 @@ void Ghost_DrawGhostTime (qboolean intermission)
 
 void Ghost_Finish (void)
 {
-    int i;
-    float split;
     ghost_marathon_level_t *gml;
     ghost_marathon_info_t *gmi = &ghost_marathon_info;
 
-    if (ghost_finish_time > 0) {
-        if (!sv.active && !cls.demoplayback) {
-            // Can't track marathons for remote servers.
-            gmi->valid = false;
-        } else if (cls.marathon_level == 1) {
-            gmi->valid = true;
-        }
-        if (!gmi->valid) {
-            // If the ghost did not finish one of the levels, just print this
-            // level's splits.
-            gmi->num_levels = 1;
-        } else {
-            gmi->num_levels = cls.marathon_level;
-        }
-
-        if (gmi->num_levels - 1 < MAX_MARATHON_LEVELS) {
-            gml = &gmi->levels[gmi->num_levels - 1];
+    if (sv.active || cls.demoplayback) {
+        if (cls.marathon_level - 1 < MAX_MARATHON_LEVELS) {
+            gml = &gmi->levels[cls.marathon_level - 1];
             Q_strncpyz(gml->map_name, CL_MapName(), MAX_QPATH);
             gml->player_time = cl.mtime[0];
-            gml->ghost_time = ghost_finish_time;
         }
 
-        Con_Printf("ghost splits:\n");
-        Con_Printf("  map                time    split    total\n");
-        Con_Printf("  \x9d\x9e\x9e\x9e\x9e\x9e\x9e\x9e\x9e\x9f "
-                   "\x9d\x9e\x9e\x9e\x9e\x9e\x9e\x9e\x9e\x9e\x9e\x9f "
-                   "\x9d\x9e\x9e\x9e\x9e\x9e\x9e\x9f "
-                   "\x9d\x9e\x9e\x9e\x9e\x9e\x9e\x9f\n");
-        gmi->total_split = 0.0f;
-        for (i = 0; i < gmi->num_levels; i++) {
-            gml = &gmi->levels[i];
-            split = (gml->player_time - gml->ghost_time);
-            gmi->total_split += split;
-            Con_Printf("  %-10s %12s %+8.2f %+8.2f\n",
-                       gml->map_name,
-                       GetPrintedTime(gml->player_time),
-                       split,
-                       gmi->total_split);
+        if (ghost_demo_path[0]) {
+            Ghost_UpdateMarathon();
+            Ghost_PrintMarathonSplits();
         }
-    } else {
-        if (gmi->valid) {
-            Con_Printf("Ghost did not finish, marathon stopped\n");
-        }
-        gmi->valid = false;
     }
 }
 
@@ -814,7 +881,6 @@ static void Ghost_Command_f (void)
         return;
     }
 
-    DZip_Cleanup(&ghost_dz_ctx);
     Q_strlcpy(demo_path, Cmd_Argv(1), sizeof(demo_path));
     demo_file = Ghost_OpenDemoOrDzip(demo_path);
     ok = (demo_file != NULL);
@@ -824,18 +890,31 @@ static void Ghost_Command_f (void)
     }
 
     if (ok) {
+        fseek(demo_file, 0, SEEK_SET);
+        if (ghost_info != NULL) {
+            Ghost_Free(&ghost_info);
+            ghost_demo_path[0] = '\0';
+            ghost_current_level = NULL;
+        }
+        ok = Ghost_ReadDemo(demo_file, &ghost_info);
+        // file is now closed.
+    }
+
+    if (ok) {
         Q_strlcpy(ghost_demo_path, demo_path, sizeof(ghost_demo_path));
         Ghost_PrintSummary();
-        Con_Printf("ghost will be loaded on next map load\n");
+        ghost_map_name[0] = '\0';  // force ghost to be loaded next time map is rendered.
     }
 
     if (!ok) {
         ghost_demo_path[0] = '\0';
-        DZip_Cleanup(&ghost_dz_ctx);
     }
 
-    if (demo_file) {
-        fclose(demo_file);
+    DZip_Cleanup(&ghost_dz_ctx);
+
+    if (ok && (sv.active || cls.demoplayback)) {
+        Ghost_UpdateMarathon();
+        Ghost_PrintMarathonSplits();
     }
 }
 
@@ -855,9 +934,9 @@ static void Ghost_RemoveCommand_f (void)
     if (ghost_demo_path[0] == '\0') {
         Con_Printf("no ghost has been added\n");
     } else {
-        Con_Printf("ghost %s will be removed on next map load\n", ghost_demo_path);
+        Ghost_Free(&ghost_info);
         ghost_demo_path[0] = '\0';
-        DZip_Cleanup(&ghost_dz_ctx);
+        ghost_current_level = NULL;
     }
 }
 
@@ -879,7 +958,7 @@ static void Ghost_ShiftCommand_f (void)
         return;
     }
 
-    if (ghost_records == NULL) {
+    if (ghost_current_level == NULL) {
         Con_Printf("ghost not loaded\n");
         return;
     }
@@ -906,7 +985,7 @@ static void Ghost_ShiftResetCommand_f (void)
         return;
     }
 
-    if (ghost_records == NULL) {
+    if (ghost_current_level == NULL) {
         Con_Printf("ghost not loaded\n");
         return;
     }
@@ -936,5 +1015,4 @@ void Ghost_Init (void)
 
 void Ghost_Shutdown (void)
 {
-    DZip_Cleanup(&ghost_dz_ctx);
 }
