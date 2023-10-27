@@ -22,7 +22,7 @@ be loaded from there (e.g. `textures/ztndm3`).
 You can download hi-resolution map textures from the [Quake Retexturing project page](https://qrp.quakeone.com/downloads/).  
 For other hi-resolution textures I recommend visiting the [gfx.quakeworld.nu](https://gfx.quakeworld.nu/) site.
 
-![32bit textures]({{ site.github.url }}/assets/img/jq-32bit-textures.gif)
+[![32bit textures]({{ site.github.url }}/assets/img/jq-32bit-textures.gif)]({{ site.github.url }}/assets/img/jq-32bit-textures.gif)
 
 ### Coloured lights
 
@@ -32,7 +32,7 @@ desired explosion or rocket lighting. See more details at
 `r_explosionlightcolor` and `r_rocketlightcolor`
 * For static colored lights, you can download `.lit` files (these contain the color information for maps) from the internet (just google for them). You need to place these files either to `maps/lits` or to `lits` folder.
 
-![Static colored lights]({{ site.github.url }}/assets/img/jq-static-colored-lights.gif)
+[![Static colored lights]({{ site.github.url }}/assets/img/jq-static-colored-lights.gif)]({{ site.github.url }}/assets/img/jq-static-colored-lights.gif)
 
 ### Improved particles
 
@@ -70,16 +70,16 @@ There are 3 additional particle effects:
 - Damagesplash (`gl_part_damagesplash`)
 - Bouncing particles (only for QMB gunshots/spikes) (`gl_bounceparticles`)
 
-See the [Settings](/cvars-commands) page for a detailed description about additional particle effects.
+See the [Settings]({{ site.github.url }}/cvars-commands) page for a detailed description about additional particle effects.
 
 ### Decals
 
 JoeQuake can display decal patches on floors and walls, when using QMB or Quake 3 style particle effects. For example, a soot stain after an explosion or blood splatters after monster gibs.  
 Similarly to particles, you can override the following individual categories:
-- Blood splatters (`gl_part_blood`)
-- Bullet holes (`gl_part_bullets`)
-- Spark trails (`gl_part_sparks`)
-- Explosion marks (`gl_part_explosions`)
+- Blood splatters (`gl_decal_blood`)
+- Bullet holes (`gl_decal_bullets`)
+- Spark trails (`gl_decal_sparks`)
+- Explosion marks (`gl_decal_explosions`)
 
 To quickly switch on/off decals, use the `toggledecals` command.  
 Go to the *Options / Decal options* menu to customize your decal settings.
@@ -88,4 +88,4 @@ Additional decal options:
 - Decal view distance (`gl_decal_viewdistance`)
 - Decal visibility time (`gl_decaltime`)
 
-See the [Settings](/cvars-commands) page for a detailed description about additional decal options.
+See the [Settings]({{ site.github.url }}/cvars-commands) page for a detailed description about additional decal options.

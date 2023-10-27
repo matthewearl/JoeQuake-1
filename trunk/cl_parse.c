@@ -1222,12 +1222,8 @@ char *GetPrintedTime(double time)
 
 void PrintFinishTime()
 {
-	if (cl_demorewind.value)
-	{
-		cls.marathon_time -= cl.completed_time;
-		cls.marathon_level--;
+	if (CL_DemoRewind())
 		return;
-	}
 
 	cls.marathon_time += cl.completed_time;
 	cls.marathon_level++;
@@ -1253,7 +1249,37 @@ void PrintFinishTime()
 		SV_BroadcastPrintf("\n");
 	}
 
-	Ghost_Finish ();
+	Ghost_Finish (CL_MapName(), cl.completed_time);
+}
+
+
+static void HandleFinish (int intermission)
+{
+	int old_intermission;
+
+	if (!cl.intermission)	//joe: only save cl.completed_time if there was no intermission overlay shown already
+	{
+		cl.completed_time = cl.mtime[0];
+		PrintFinishTime();
+	}
+
+	if (cls.demoplayback)
+	{
+		old_intermission = cl.intermission;
+		cl.intermission = CL_DemoIntermissionState(cl.intermission, intermission);
+
+		// Remove the last level time if we're reversing and intermission just
+		// disappeared.
+		if (old_intermission && !cl.intermission)
+		{
+			cls.marathon_time -= cl.completed_time;
+			cls.marathon_level--;
+		}
+	}
+	else
+	{
+		cl.intermission = intermission;
+	}
 }
 
 /*
@@ -1358,6 +1384,8 @@ void CL_ParseServerMessage (void)
 			break;
 
 		case svc_serverinfo:
+			if (cls.demoplayback)
+				S_StopAllSounds (true);
 			CL_ParseServerInfo ();
 			vid.recalc_refdef = true;	// leave intermission full screen
 			break;
@@ -1455,7 +1483,7 @@ void CL_ParseServerMessage (void)
 			break;
 
 		case svc_killedmonster:
-			if (cls.demoplayback && cl_demorewind.value)
+			if (CL_DemoRewind())
 				cl.stats[STAT_MONSTERS]--;
 			else
 				cl.stats[STAT_MONSTERS]++;
@@ -1463,7 +1491,7 @@ void CL_ParseServerMessage (void)
 			break;
 
 		case svc_foundsecret:
-			if (cls.demoplayback && cl_demorewind.value)
+			if ((CL_DemoRewind()))
 				cl.stats[STAT_SECRETS]--;
 			else
 				cl.stats[STAT_SECRETS]++;
@@ -1496,26 +1524,13 @@ void CL_ParseServerMessage (void)
 			break;
 
 		case svc_intermission:
-			if (cls.demoplayback)
-				cl.intermission = CL_DemoIntermissionState(cl.intermission, 1);
-			else
-				cl.intermission = 1;
-			cl.completed_time = cl.mtime[0];	//joe: intermission bugfix
+			HandleFinish(1);
 			vid.recalc_refdef = true;	// go to full screen
-			PrintFinishTime();
 			V_RestoreAngles ();
 			break;
 
 		case svc_finale:
-			if (!cl.intermission)	//joe: only save cl.completed_time if there was no intermission overlay shown already
-			{
-				cl.completed_time = cl.mtime[0];	//joe: intermission bugfix
-				PrintFinishTime();
-			}
-			if (cls.demoplayback)
-				cl.intermission = CL_DemoIntermissionState(cl.intermission, 2);
-			else
-				cl.intermission = 2;
+			HandleFinish(2);
 			vid.recalc_refdef = true;	// go to full screen
 			//johnfitz -- log centerprints to console
 			str = MSG_ReadString();
@@ -1526,15 +1541,7 @@ void CL_ParseServerMessage (void)
 			break;
 
 		case svc_cutscene:
-			if (!cl.intermission)	//joe: only save cl.completed_time if there was no intermission overlay shown already
-			{
-				cl.completed_time = cl.mtime[0];	//joe: intermission bugfix
-				PrintFinishTime();
-			}
-			if (cls.demoplayback)
-				cl.intermission = CL_DemoIntermissionState(cl.intermission, 3);
-			else
-				cl.intermission = 3;
+			HandleFinish(3);
 			vid.recalc_refdef = true;	// go to full screen
 			//johnfitz -- log centerprints to console
 			str = MSG_ReadString();

@@ -63,6 +63,7 @@ cvar_t	cl_independentphysics = {"cl_independentphysics", "1", CVAR_INIT};
 cvar_t	cl_viewweapons = {"cl_viewweapons", "0"};
 cvar_t	cl_autodemo = { "cl_autodemo", "0" };
 cvar_t	cl_autodemo_name = { "cl_autodemo_name", "" };
+cvar_t	cl_demoui = {"cl_demoui", "1", CVAR_ARCHIVE};
 
 client_static_t	cls;
 client_state_t	cl;
@@ -544,7 +545,7 @@ float CL_LerpPoint (void)
 
 	f = cl.mtime[0] - cl.mtime[1];
 
-	if (!f || cl_nolerp.value || cls.timedemo || 
+	if (!f || cl_nolerp.value || cls.timedemo || demoui_dragging_seek || 
 		(sv.active && (!cl_independentphysics.value || host_frametime > 1.0 / 72.0)))	// ignore lerping if client fps is too low (not goes above 72 - the server fps)
 	{
 		cl.time = cl.ctime = cl.mtime[0];
@@ -1318,7 +1319,7 @@ void CL_ReadFromServer (void)
 
 	cl.oldtime = cl.ctime;
 	cl.time += host_frametime;
-	if (!cl_demorewind.value || !cls.demoplayback)
+	if (!CL_DemoRewind())
 		cl.ctime += host_frametime;
 	else
 		cl.ctime -= host_frametime;
@@ -1447,6 +1448,7 @@ void CL_Init (void)
 	Cvar_Register (&cl_viewweapons);
 	Cvar_Register(&cl_autodemo);
 	Cvar_Register(&cl_autodemo_name);
+	Cvar_Register(&cl_demoui);
 
 	if (COM_CheckParm("-noindphys"))
 	{
@@ -1458,6 +1460,8 @@ void CL_Init (void)
 	Cmd_AddCommand ("record", CL_Record_f);
 	Cmd_AddCommand ("stop", CL_Stop_f);
 	Cmd_AddCommand ("playdemo", CL_PlayDemo_f);
+	Cmd_AddCommand ("demoskip", CL_DemoSkip_f);
+	Cmd_AddCommand ("demoseek", CL_DemoSeek_f);
 	Cmd_AddCommand ("timedemo", CL_TimeDemo_f);
 	Cmd_AddCommand("keepdemo", CL_KeepDemo_f);
 
