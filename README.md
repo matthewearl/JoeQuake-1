@@ -3,10 +3,19 @@
 This is a fork of
 [Joe's JoeQuake repository](https://github.com/j0zzz/JoeQuake), the speedrunning
 focused Quake engine.  It adds files to allow building the SDL version of
-JoeQuake on Linux.  To build run the following from the repository root:
+JoeQuake on Linux.  To build first install dependencies:
 
 ```bash
-# TODO:  Add steps for installing dependencies.
+# For Ubuntu users
+sudo apt-get update
+sudo apt-get install cmake build-essential libz-dev libsdl2-dev libjpeg-dev libgl1-mesa-dev libpng-dev
+
+# For Arch users
+sudo pacman -Syu base-devel cmake zlib sdl2 libjpeg-turbo mesa libpng
+```
+
+...and then run the following from the repository root:
+```bash
 mkdir build
 cd build
 cmake ..
