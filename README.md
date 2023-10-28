@@ -9,7 +9,8 @@ JoeQuake on Linux.  To build first install dependencies:
 # For Ubuntu users
 sudo apt-get update
 sudo apt-get install cmake build-essential libz-dev libsdl2-dev libjpeg-dev libgl1-mesa-dev libpng-dev
-
+```
+```bash
 # For Arch users
 sudo pacman -Syu base-devel cmake zlib sdl2 libjpeg-turbo mesa libpng
 ```
