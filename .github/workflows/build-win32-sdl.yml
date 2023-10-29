@@ -18,17 +18,8 @@ jobs:
       run: |
         msbuild Windows/VisualStudio/JoeQuake.vcxproj /p:Configuration="SDL Release" /p:Platform=Win32
 
-    - name: List All Files
-      shell: cmd
-      run: |
-        dir /s /b
-
-    - name: Rename Output File
-      run: |
-        mv Windows/VisualStudio/release_sdl/JoeQuake.exe Windows/VisualStudio/release_sdl/joequake-sdl.exe
-
     - name: Upload Executable as Artifact
       uses: actions/upload-artifact@v2
       with:
         name: joequake-sdl
-        path: Windows/VisualStudio/release_sdl/joequake-sdl.exe
+        path: Windows/VisualStudio/release_sdl/joequake-gl-sdl.exe
