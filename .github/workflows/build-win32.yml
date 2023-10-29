@@ -27,9 +27,9 @@ jobs:
     - name: Build the GL Project
       run: |
         msbuild Windows/VisualStudio/JoeQuake.vcxproj /p:Configuration="GL Release" /p:Platform=Win32
-    - name: Upload GL Executable as Artifact
 
+    - name: Upload GL Executable as Artifact
       uses: actions/upload-artifact@v2
       with:
         name: joequake-gl
-        path: Windows/VisualStudio/release_sdl/joequake-gl.exe
+        path: Windows/VisualStudio/release_gl/joequake-gl.exe
