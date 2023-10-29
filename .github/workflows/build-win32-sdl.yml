@@ -18,6 +18,11 @@ jobs:
       run: |
         msbuild Windows/VisualStudio/JoeQuake.vcxproj /p:Configuration="SDL Release" /p:Platform=Win32
 
+    - name: List All Files
+      shell: cmd
+      run: |
+        dir /s /b
+
     - name: Rename Output File
       run: |
         mv Windows/VisualStudio/release_sdl/JoeQuake.exe Windows/VisualStudio/release_sdl/joequake-sdl.exe
