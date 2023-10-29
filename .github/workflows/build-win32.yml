@@ -1,4 +1,4 @@
-name: Build Windows SDL Executable
+name: Build Windows Executables
 
 on:
   workflow_dispatch:
@@ -14,12 +14,22 @@ jobs:
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v1.0.2
 
-    - name: Build the Project
+    - name: Build the SDL Project
       run: |
         msbuild Windows/VisualStudio/JoeQuake.vcxproj /p:Configuration="SDL Release" /p:Platform=Win32
 
-    - name: Upload Executable as Artifact
+    - name: Upload SDL Executable as Artifact
       uses: actions/upload-artifact@v2
       with:
         name: joequake-sdl
         path: Windows/VisualStudio/release_sdl/joequake-gl-sdl.exe
+
+    - name: Build the GL Project
+      run: |
+        msbuild Windows/VisualStudio/JoeQuake.vcxproj /p:Configuration="GL Release" /p:Platform=Win32
+    - name: Upload GL Executable as Artifact
+
+      uses: actions/upload-artifact@v2
+      with:
+        name: joequake-gl
+        path: Windows/VisualStudio/release_sdl/joequake-gl.exe
