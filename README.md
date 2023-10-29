@@ -1,4 +1,12 @@
-﻿
+﻿This is a fork of [Joe's JoeQuake repository](https://github.com/j0zzz/JoeQuake)
+with an added Github Actions workflow file for building Windows exes.  It is
+here so I can avoid booting a windows VM to produce windows binaries for
+testing.  You should use Joe's repo for official JQ builds.
+
+The original JoeQuake README is below.
+
+---
+
 ## Description
 
 JoeQuake is a custom Quake engine designed exclusively for speedrunning.  
