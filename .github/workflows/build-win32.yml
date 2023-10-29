@@ -4,22 +4,10 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
-    runs-on: windows-latest
-
+  fail_job:
+    runs-on: ubuntu-latest
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
-
-    - name: Setup MSBuild
-      uses: microsoft/setup-msbuild@v1.0.2
-
-    - name: Build the Project
+    - name: Fail Step
       run: |
-        msbuild Windows/VisualStudio/JoeQuake.vcxproj /p:Configuration="SDL Release" /p:Platform=Win32
-
-    - name: Upload Executable as Artifact
-      uses: actions/upload-artifact@v2
-      with:
-        name: JoeQuake-exe
-        path: release_sdl/joequake-gl-sdl.exe
+        echo "Building Windows exes is not supported on this branch"
+        exit 1
