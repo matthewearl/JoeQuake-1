@@ -1,4 +1,4 @@
-name: Build Windows SDL Executable
+name: Build Windows Executables
 
 on:
   workflow_dispatch:
