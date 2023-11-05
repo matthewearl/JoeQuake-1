@@ -21,26 +21,22 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "quakedef.h"
 #include "winquake.h"
+#include "ghost/demosummary.h"
 #include <time.h>	// easyrecord stats
 
 #ifdef _WIN32
 #include "movie.h"
+#else
+#include "errno.h"
 #endif
 
 framepos_t	*dem_framepos = NULL;
 qboolean	start_of_demo = false;
 
-// .dz playback
-#ifdef _WIN32
-static	HANDLE	hDZipProcess = NULL;
-#else
-#include <errno.h>
-//#include <sys/types.h>
-#include <sys/wait.h>
-#include <unistd.h>
-static qboolean hDZipProcess = false;
-#endif
-
+dseek_info_t demo_seek_info;
+qboolean demo_seek_info_available;
+static double seek_time;
+static qboolean seek_backwards, seek_was_backwards;
 static dzip_context_t dzCtx;
 static qboolean	dz_playback = false;
 qboolean	dz_unpacking = false;
@@ -75,6 +71,23 @@ void CL_InitDemo (void)
 void CL_ShutdownDemo (void)
 {
 	DZip_Cleanup(&dzCtx);
+}
+
+
+qboolean CL_DemoRewind(void)
+{
+	if (!cls.demoplayback)
+		return false;
+
+	if (seek_time >= 0)
+		return seek_backwards;
+
+	return (cl_demorewind.value != 0);
+}
+
+qboolean CL_DemoUIOpen(void)
+{
+    return demo_seek_info_available && cl_demoui.value && cls.demoplayback && cls.demofile;
 }
 
 
@@ -160,6 +173,26 @@ void EraseTopEntry (void)
 	free (top);
 }
 
+
+extern float fade_done;
+extern	float	scr_centertime_off;
+static void
+EndSeek (void)
+{
+	seek_time = -1.0;
+
+	if (seek_was_backwards)
+	{
+		// Remove all ephemerals when seeking backwards
+		memset(cl_dlights, 0, sizeof(cl_dlights));
+		R_ClearParticles();
+		CL_ClearTEnts();
+		scr_centertime_off = 0;
+		fade_done = 0.0f;
+	}
+}
+
+
 /*
 ====================
 CL_GetMessage
@@ -171,8 +204,9 @@ int CL_GetMessage (void)
 {
 	int	r, i;
 	float	f;
-	
-	if (cl.paused & 2)
+	qboolean backwards;
+
+	if (seek_time < 0 && (cl.paused & 2 || demoui_dragging_seek))
 		return 0;
 
 	CheckDZipCompletion ();
@@ -181,8 +215,21 @@ int CL_GetMessage (void)
 
 	if (cls.demoplayback)
 	{
-		if (start_of_demo && cl_demorewind.value)
+		if (seek_time >= 0 && seek_backwards && cl.mtime[0] < seek_time)
+		{
+			// If we are seeking backwards and just passed the target time, go
+			// forwards for another frame.  This means the frame we settle on is
+			// always the one immediately after (or equal to) the target time.
+			seek_backwards = false;
+		}
+
+		backwards = CL_DemoRewind();
+
+		if (start_of_demo && backwards)
+		{
+			EndSeek();
 			return 0;
+		}
 
 		if (cls.signon < SIGNONS)	// clear stuffs if new demo
 			while (dem_framepos)
@@ -202,12 +249,17 @@ int CL_GetMessage (void)
 					cls.td_starttime = realtime;
 			}
 			// modified by joe to handle rewind playing
-			else if (!cl_demorewind.value && cl.ctime <= cl.mtime[0])
+			else if (seek_time < 0 && !cl_demorewind.value && cl.ctime <= cl.mtime[0])
 				return 0;		// don't need another message yet
-			else if (cl_demorewind.value && cl.ctime >= cl.mtime[0])
+			else if (seek_time < 0 && cl_demorewind.value && cl.ctime >= cl.mtime[0])
 				return 0;
+			else if (seek_time >= 0 && !seek_backwards && cl.mtime[0] >= seek_time)
+			{
+				EndSeek();
+				return 0;
+			}
 
-			if (!cl_demorewind.value)
+			if (!backwards)
 			{
 				// joe: fill in the stack of frames' positions
 				PushFrameposEntry (ftell(cls.demofile));
@@ -219,6 +271,7 @@ int CL_GetMessage (void)
 				EraseTopEntry ();
 				if (!dem_framepos) {
 					start_of_demo = true;
+					EndSeek();
 					return 0;
 				}
 			}
@@ -486,12 +539,20 @@ void CL_Record_f (void)
 void StartPlayingOpenedDemo (void)
 {
 	int		c;
+	long	demo_offset;
 	qboolean	neg = false;
 
 	cls.demoplayback = true;
 	cls.state = ca_connected;
 	cls.forcetrack = 0;
+	seek_time = -1.0;
 
+	demo_offset = ftell(cls.demofile);
+	demo_seek_info_available = DSeek_Parse (cls.demofile, &demo_seek_info);
+	if (!demo_seek_info_available)
+		Con_Printf("WARNING: Could not extract seek information from demo, UI disabled\n");
+
+	fseek(cls.demofile, demo_offset, SEEK_SET);
 	while ((c = getc(cls.demofile)) != '\n')
 	{
 		if (c == EOF)
@@ -514,6 +575,10 @@ void StartPlayingOpenedDemo (void)
 	// mid-demo).
 	cls.marathon_time = 0;
 	cls.marathon_level = 0;
+
+
+	// Unpause otherwise the game just sits on the console until unpausing...
+	cl.paused &= ~2;
 }
 
 // joe: playing demos from .dz files
@@ -593,6 +658,9 @@ static void PlayDZDemo (void)
 			cls.demofile = NULL;
 			cls.state = ca_connected;
 			break;
+        default:
+            Sys_Error("Invalid dzip status %d", dzip_status);
+            return;
 	}
 }
 
@@ -660,6 +728,144 @@ void CL_PlayDemo_f (void)
 	Con_Printf ("Playing demo from %s\n", COM_SkipPath(name));
 
 	StartPlayingOpenedDemo ();
+}
+
+
+dseek_map_info_t *CL_DemoGetCurrentMapInfo (int *map_num_p)
+{
+	long current_offset;
+	int map_num;
+	dseek_map_info_t *dsmi;
+
+	if (!cls.demoplayback || !cls.demofile)
+		Sys_Error ("not playing demo");
+
+	if (!demo_seek_info_available)
+		Sys_Error ("demo seek info not available");
+
+	current_offset = ftell(cls.demofile);
+	for (map_num = 0;
+			current_offset >= demo_seek_info.maps[map_num].offset &&
+			map_num < demo_seek_info.num_maps;
+			map_num++)
+	{
+	}
+
+	if (map_num > 0)
+		dsmi = &demo_seek_info.maps[map_num - 1];
+	else
+		dsmi = NULL;  // before the first server info msg, this shouldn't happen
+
+	if (map_num_p)
+		*map_num_p = map_num - 1;
+
+	return dsmi;
+}
+
+
+void CL_DemoSkip_f (void)
+{
+	char *map_num_str;
+	int i, map_num;
+	long current_offset;
+	dseek_map_info_t *dsmi;
+
+	if (!cls.demoplayback || !cls.demofile)
+	{
+		Con_Printf ("not playing a demo\n");
+		return;
+	}
+
+	if (!demo_seek_info_available)
+	{
+		Con_Printf ("Cannot skip since seek info could not be read from demo\n");
+		return;
+	}
+
+	if (Cmd_Argc() != 2)
+	{
+		for (map_num = 0; map_num < demo_seek_info.num_maps; map_num++)
+			Con_Printf("%d : %s\n", map_num, demo_seek_info.maps[map_num].name);
+		Con_Printf ("\ndemoskip <map number> : skip to map\n");
+		return;
+	}
+
+	// Convert argument to a map number.
+	map_num_str = Cmd_Argv(1);
+	if (map_num_str[0] == '+' || map_num_str[0] == '-') {
+		current_offset = ftell(cls.demofile);
+		for (map_num = 0;
+				current_offset >= demo_seek_info.maps[map_num].offset &&
+				map_num < demo_seek_info.num_maps;
+				map_num++)
+		{
+		}
+
+		map_num = map_num - 1 + atoi(map_num_str);
+	} else {
+		map_num = atoi(map_num_str);
+	}
+
+	// Validate the map number.
+	if (map_num < 0 || map_num >= demo_seek_info.num_maps
+		|| demo_seek_info.maps[map_num].offset < 0)
+	{
+		Con_Printf("invalid map number %d\n", map_num);
+		return;
+	}
+
+	// Actually do the seek.
+	dsmi = &demo_seek_info.maps[map_num];
+	if (fseek(cls.demofile, dsmi->offset, SEEK_SET) == -1)
+	{
+		Con_Printf("seek failed\n", map_num);
+		return;
+	}
+
+	// Reset marathon information.
+	cls.marathon_time = 0;
+	cls.marathon_level = 0;
+	for (i = 0; i < map_num; i++)
+	{
+		dsmi = &demo_seek_info.maps[i];
+		if (dsmi->finish_time > 0)
+		{
+			cls.marathon_time += dsmi->finish_time;
+			cls.marathon_level++;
+			Ghost_Finish (dsmi->name, dsmi->finish_time);
+		}
+	}
+
+	Cvar_SetValue(&cl_demorewind, 0.);
+	cl.paused &= ~2;
+}
+
+void CL_DemoSeek_f (void)
+{
+	char *time_str;
+
+	if (!cls.demoplayback || !cls.demofile)
+	{
+		Con_Printf ("not playing a demo\n");
+		return;
+	}
+
+	if (Cmd_Argc() != 2)
+	{
+		Con_Printf ("demoseek <time> : seek to time\n");
+		return;
+	}
+
+	time_str = Cmd_Argv(1);
+	if (time_str[0] == '+' || time_str[0] == '-')
+		seek_time = cl.mtime[0] + atof(time_str);
+	else
+		seek_time = atof(time_str);
+
+	if (seek_time < 0.)
+		seek_time = 0.;
+
+	seek_was_backwards = seek_backwards = (seek_time < cl.mtime[0]);
 }
 
 /*
@@ -813,7 +1019,7 @@ static void DemoIntermissionStatePush (int value) {
 
 int CL_DemoIntermissionState (int old_state, int new_state)
 {
-	if (cl_demorewind.value)
+	if (CL_DemoRewind())
 		return DemoIntermissionStatePop();
 
 	DemoIntermissionStatePush(old_state);

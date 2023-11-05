@@ -22,7 +22,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 
 
-#include "../quakedef.h"
+#include "quakedef.h"
 #include "demoparse.h"
 
 
@@ -948,6 +948,8 @@ DP_ReadPacket(ctx_t *ctx) {
     dp_err_t rc;
     int packet_len;
     vec3_t view_angle;
+
+    CALL_CALLBACK_NO_ARGS(packet_start);
 
     // Read packet header and packet
     CHECK_RC(DP_ReadFromFile(ctx, &packet_len, sizeof(packet_len)));
