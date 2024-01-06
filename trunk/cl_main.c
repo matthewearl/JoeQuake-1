@@ -1163,7 +1163,7 @@ void CL_RelinkEntities (void)
 		}
 #endif
 
-		if (i == cl.viewentity && !cl_thirdperson.value)
+		if (i == cl.viewentity && !cl_thirdperson.value && !cl.freefly_enabled)
 			continue;
 
 		// nehahra support
