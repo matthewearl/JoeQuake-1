@@ -48,6 +48,10 @@ cvar_t	show_speed = {"show_speed", "0"};
 cvar_t  show_speed_x = { "show_speed_x", "0" }; 
 cvar_t  show_speed_y = { "show_speed_y", "-2" };
 cvar_t  show_speed_alpha = { "show_speed_alpha", "0.8" };
+
+cvar_t	show_view_angles = {"show_view_angles", "0"};
+cvar_t  show_view_angles_x = { "show_view_angles_x", "-5" }; 
+cvar_t  show_view_angles_y = { "show_view_angles_y", "-2" };
 /*
 CRASH FORT
 
@@ -1300,6 +1304,29 @@ void SCR_DrawSpeed (void)
 	}
 }
 
+/*
+==============
+SCR_DrawViewAngles
+==============
+*/
+void SCR_DrawViewAngles (void)
+{
+
+	int x, y;
+	char		str[32];
+
+	if (cl.intermission || !show_view_angles.value)
+		return;
+
+	snprintf(str, sizeof(str), "\xd0\xba%+6.2f \xd9\xba%6.2f",
+				cl.viewangles[0], cl.viewangles[1]);
+
+	x = ELEMENT_X_COORD(show_view_angles);
+	y = ELEMENT_Y_COORD(show_view_angles);
+	Draw_String (x, y, str, true);
+}
+
+
 float	drawstats_limit;
 
 /*
@@ -1596,6 +1623,10 @@ void V_Init (void)
 	Cvar_Register(&show_speed_x);
 	Cvar_Register(&show_speed_y);
 	Cvar_Register(&show_speed_alpha);
+
+	Cvar_Register(&show_view_angles);
+	Cvar_Register(&show_view_angles_x);
+	Cvar_Register(&show_view_angles_y);
 	/*
 	CRASH FORT
 	*/

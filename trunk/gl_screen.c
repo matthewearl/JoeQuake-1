@@ -1156,6 +1156,7 @@ void SCR_UpdateScreen (void)
 		SCR_DrawFPS ();
 		SCR_DrawSpeed ();
 		Ghost_DrawGhostTime (false);
+		SCR_DrawViewAngles ();
 		SCR_DrawStats ();
 		SCR_DrawVolume ();
 		SCR_DrawPlaybackStats ();
