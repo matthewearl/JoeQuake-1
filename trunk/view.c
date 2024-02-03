@@ -1316,10 +1316,21 @@ void SCR_DrawViewAngles (void)
 
 	int x, y;
 	int dp;
-	char		str[128];
+	char str[128];
+	float *viewangles;
 
 	if (cl.intermission || !show_view_angles.value)
 		return;
+
+	if (cls.demoplayback)
+	{
+		// Show uninterpolated view angles.
+		viewangles = cl.mviewangles[0];
+	}
+	else
+	{
+		viewangles = cl.viewangles;
+	}
 
 	dp = (int)show_view_angles_dp.value;
 
@@ -1327,13 +1338,15 @@ void SCR_DrawViewAngles (void)
 	{
 		// Include roll
 		snprintf(str, sizeof(str), "\xd0\xba%+*.*f \xd9\xba%*.*f \xd2\xba%*.*f",
-					dp + 4, dp, cl.viewangles[0],
-					dp + 4, dp, cl.viewangles[1],
-					dp + 4, dp, cl.viewangles[2]);
-	} else {
+					dp + 4, dp, viewangles[0],
+					dp + 4, dp, viewangles[1],
+					dp + 4, dp, viewangles[2]);
+	}
+	else
+	{
 		snprintf(str, sizeof(str), "\xd0\xba%+*.*f \xd9\xba%*.*f",
-					dp + 4, dp, cl.viewangles[0],
-					dp + 4, dp, cl.viewangles[1]);
+					dp + 4, dp, viewangles[0],
+					dp + 4, dp, viewangles[1]);
 	}
 
 	x = ELEMENT_X_COORD(show_view_angles);
