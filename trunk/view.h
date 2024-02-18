@@ -75,6 +75,7 @@ char *LocalTime (char *format);
 void SCR_DrawClock (void);
 void SCR_DrawSpeed (void);
 void SCR_DrawViewAngles (void);
+void SCR_DrawPos (void);
 void SCR_DrawFPS (void);
 void SCR_DrawStats (void);
 void SCR_DrawVolume (void);

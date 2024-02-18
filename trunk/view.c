@@ -54,6 +54,10 @@ cvar_t  show_view_angles_x = { "show_view_angles_x", "-5" };
 cvar_t  show_view_angles_y = { "show_view_angles_y", "-2" };
 cvar_t  show_view_angles_dp = {"show_view_angles_dp", "2"};
 
+cvar_t	show_pos = {"show_pos", "0"};
+cvar_t  show_pos_x = { "show_pos_x", "-5" }; 
+cvar_t  show_pos_y = { "show_pos_y", "-3" };
+cvar_t  show_pos_dp = {"show_pos_dp", "1"};
 /*
 CRASH FORT
 
@@ -1308,6 +1312,48 @@ void SCR_DrawSpeed (void)
 
 /*
 ==============
+SCR_DrawPos 
+==============
+*/
+entity_t *CL_EntityNum (int num);
+void SCR_DrawPos (void)
+{
+
+	int x, y;
+	int dp;
+	char str[128];
+	entity_t	*ent;
+	float *pos;
+
+	if (cls.signon != SIGNONS || cl.intermission || !show_pos.value)
+		return;
+
+	ent = CL_EntityNum (cl.viewentity);
+
+	if (cls.demoplayback)
+	{
+		// Show uninterpolated view angles.
+		pos = ent->msg_origins[0];
+	}
+	else
+	{
+		pos = ent->origin;
+	}
+
+	dp = (int)show_pos_dp.value;
+
+	snprintf(str, sizeof(str), "\xd8\xba%+*.*f \xd9\xba%+*.*f \xda\xba%+*.*f",
+				dp + 6, dp, pos[0],
+				dp + 6, dp, pos[1],
+				dp + 6, dp, pos[2]);
+
+	x = ELEMENT_X_COORD(show_pos);
+	y = ELEMENT_Y_COORD(show_pos);
+	Draw_String (x, y, str, true);
+}
+
+/*
+==============
 SCR_DrawViewAngles
 ==============
 */
@@ -1651,6 +1697,11 @@ void V_Init (void)
 	Cvar_Register(&show_speed_x);
 	Cvar_Register(&show_speed_y);
 	Cvar_Register(&show_speed_alpha);
+
+	Cvar_Register(&show_pos);
+	Cvar_Register(&show_pos_x);
+	Cvar_Register(&show_pos_y);
+	Cvar_Register(&show_pos_dp);
 
 	Cvar_Register(&show_view_angles);
 	Cvar_Register(&show_view_angles_x);
