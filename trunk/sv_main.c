@@ -80,6 +80,7 @@ void SV_Init (void)
 	const char *p;
 	extern cvar_t sv_altnoclip; //johnfitz
 	extern cvar_t sv_noclipspeed;
+	extern	cvar_t	sv_gameplayfix_setmodelrealbox;	// copied from QSS
 
 	sv.edicts = NULL; // ericw -- sv.edicts switched to use malloc() 
 
@@ -95,6 +96,7 @@ void SV_Init (void)
 	Cvar_Register (&sv_nostep);
 	Cvar_Register (&sv_altnoclip); //johnfitz
 	Cvar_Register (&sv_noclipspeed);
+	Cvar_Register (&sv_gameplayfix_setmodelrealbox);
 
 	Cmd_AddCommand("sv_protocol", &SV_Protocol_f); //johnfitz
 

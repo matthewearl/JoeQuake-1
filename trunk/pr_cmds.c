@@ -270,6 +270,7 @@ PF_setmodel
 setmodel(entity, model)
 =================
 */
+cvar_t sv_gameplayfix_setmodelrealbox = {"sv_gameplayfix_setmodelrealbox", "0"};
 void PF_setmodel (void)
 {
 	int	i;
@@ -296,7 +297,7 @@ void PF_setmodel (void)
 	if (mod)
 	//johnfitz -- correct physics cullboxes for bmodels
 	{
-		if (mod->type == mod_brush)
+		if (mod->type == mod_brush || !sv_gameplayfix_setmodelrealbox.value)
 			SetMinMaxSize(e, mod->clipmins, mod->clipmaxs, true);
 		else
 			SetMinMaxSize(e, mod->mins, mod->maxs, true);
