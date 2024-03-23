@@ -2692,6 +2692,10 @@ void Mod_LoadAliasModel (model_t *mod, void *buffer)
 
 	Mod_CalcAliasBounds(pheader); //johnfitz
 
+	//Spike: for setmodel compat with vanilla
+	mod->clipmins[0] = mod->clipmins[1] = mod->clipmins[2] = -16;
+	mod->clipmaxs[0] = mod->clipmaxs[1] = mod->clipmaxs[2] = 16;
+
 // build the draw lists
 	GL_MakeAliasModelDisplayLists (mod, pheader);
 
