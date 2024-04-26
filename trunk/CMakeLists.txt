@@ -138,6 +138,7 @@ add_executable(joequake-gl
     demoparse.c
     demoparse.h
     demoseekparse.c
+    freefly.c
     ghost/ghost.c
     ghost/ghost.h
     ghost/ghost_private.h
