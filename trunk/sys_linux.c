@@ -19,6 +19,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 */
 // sys_linux.c
 
+#if defined(SDL2)
+#include <SDL.h>
+#endif
+
 #include <unistd.h>
 #include <signal.h>
 #include <stdlib.h>
@@ -354,7 +358,23 @@ void Sys_MakeCodeWriteable (unsigned long startaddr, unsigned long length)
 #define SYS_CLIPBOARD_SIZE	256
 static	char	clipboard_buffer[SYS_CLIPBOARD_SIZE] = {0};
 
+#if !defined(SDL2)
 char *Sys_GetClipboardData (void)
 {
 	return clipboard_buffer;
 }
+#else
+char *Sys_GetClipboardData (void)
+{
+	return SDL_GetClipboardText();
+}
+
+qboolean Sys_SetClipboardData (const char *text)
+{
+	qboolean success;
+	success = (SDL_SetClipboardText(text) == 0);
+	if (!success)
+		Con_Printf("Error setting clipboard: %s\n", SDL_GetError());
+	return success;
+}
+#endif
