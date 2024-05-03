@@ -167,6 +167,11 @@ Removes gibs if turned on, `0` (off) by default.
 
 Toggles between transparent (`0`), old/original (`1`) and alternative (`2`) huds, `0` by default.
 
+##### `cl_sbar_offset`
+
+Lifts the position of hud icons from the bottom with the specified offset. Valid range is from `0` (no offset) to `8` (max offset). Only applied to hud styles `0` and `2`.  
+Default value is `0`.
+
 ##### `cl_demorewind`
 
 Toggles between normal and backward demoplaying, `0` by default.
@@ -239,9 +244,14 @@ If turned on (`1`), everything that Quake can't interpret
 (not command or cvar or alias) is sent as chat. Similar to QW clients, you don't have to type `say ` every time you wanna say something.  
 Default value is `1`.
 
-##### `cl_oldbob`
+##### `cl_newbob`
 
 Toggles between old and new style weapon bobbing, `0` by default.
+
+##### `cl_gun_fovscale`
+
+If turned on (`1`), the gun model is scaled according to the current FOV. Decimal values are also accepted for partial scaling.  
+Default value is `0`.
 
 ##### `cl_minpitch`
 
@@ -258,6 +268,16 @@ Default value is `80`.
 Switch for the demo player UI, `0` means the player is hidden.
 Default value is `1`.
 
+##### `cl_demouitimeout`
+
+Time that you have to keep the mouse still and not hovering over the demo UI
+before the UI hiding animation starts.
+
+##### `cl_demouihidespeed`
+
+Speed of the demo UI hiding animation which begins once the above timeout has
+elapsed.
+
 ##### `cl_independentphysics`
 
 Server and Client framerates are independent. This setting is turned on by default. To turn it off you need to start joequake with the following command line:
@@ -265,6 +285,10 @@ Server and Client framerates are independent. This setting is turned on by defau
 ```
 +set cl_independentphysics 0
 ```
+
+##### `freefly_speed`
+
+Set the speed the camera moves when in freefly mode.  `800` by default.
 
 #### Server
 
@@ -328,6 +352,14 @@ Turn fullbright polys on brush models on/off, `1` by default.
 ##### `gl_fb_models`
 
 Turn fullbright polys on alias models on/off, `1` by default.
+
+##### `gl_overbright`
+
+Sets lighting overbright on map surfaces, `1` by default.
+
+##### `gl_overbright_models`
+
+Sets lighting overbright on models, `1` by default.
 
 ##### `gl_interpolate_animation`
 
@@ -544,6 +576,11 @@ default.
 
 Set texture filtering mode for sky textures. Valid modes: `GL_LINEAR` and
 `GL_NEAREST`, `GL_LINEAR` by default.
+
+##### `gl_texture_anisotropy`
+
+Sets the level of anisotropic texture filtering. A valid value should be a power of two: `2 4 8 16` (depending on your hardware's limits).
+If you don't wanna use anisotropic filtering, set the value to `1`.
 
 ##### `gl_zfix`
 
@@ -999,3 +1036,33 @@ an automatic name based on current map and time is used.
 
 Overrides the default `15` (NetQuake) protocol version with given value. Recognized values are `666` (FitzQuake) and `999` (RMQ).
 This command primarly aims to keep JoeQuake compatible with mods.
+
+##### `freefly`
+
+Toggle freefly mode.  This is a free flying third-person camera that can be used
+during demo playback.  See below for how to control the camera.
+
+##### `+freeflymove` / `-freeflymove`
+
+Enable movement of the camera in freefly mode.  When enabled, the usual inputs
+will manipulate the camera's position (`+moveleft`, `+moveright`, `+forward`,
+`+back`, mouse movements, etc).  You'll typically want to bind this to a key,
+which should be held down to move the camera.
+
+##### `freefly_copycam`
+
+Copy a ReMaic-style command to the clipboard, indicating the freefly camera's
+location, viewing direction, and current demo timestamp.  The output must be
+manipulated a little to make a valid ReMaic script --- the timestamp output as
+the third copied line must be used as a prefix for the next command, and
+likewise the copied `move` and `pan` command must be themselves prefixed with a
+timestamp from the previous command.  This is because ReMaic's move and pan
+commands indicate when the movement should *start* rather than when it should
+end, so timestamps need to be shifted on by one.
+
+This command currently does not work on the win32 build.
+
+##### `freefly_writecam [filename]`
+
+Like `freefly_copycam`, but append commands to the provided filename instead.
+This command is available on all builds.
