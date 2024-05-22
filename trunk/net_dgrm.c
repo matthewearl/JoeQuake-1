@@ -98,6 +98,10 @@ char *StrAddr (struct qsockaddr *addr)
 	return buf;
 }
 #endif
+#ifndef _WIN32
+unsigned _lrotl (unsigned x, int s);
+unsigned _lrotr (unsigned x, int s);
+#endif
 
 #ifdef BAN_TEST
 uint32_t	banAddr = 0x00000000;
