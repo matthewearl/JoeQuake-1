@@ -493,6 +493,7 @@ void FreeFly_UpdateOrigin (void);
 void FreeFly_MouseMove (double x, double y);
 void FreeFly_SetRefdef (void);
 qboolean FreeFly_Moving (void);
+void FreeFly_DrawPos (void);
 
 #ifdef GLQUAKE
 dlighttype_t SetDlightColor (float f, dlighttype_t def, qboolean random);

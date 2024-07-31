@@ -1168,6 +1168,7 @@ void SCR_UpdateScreen (void)
 		Sbar_Draw ();
 		SCR_DrawConsole ();
 		M_Draw ();
+		FreeFly_DrawPos ();
 	}
 
 	if (CL_DemoUIOpen() && key_dest == key_game)
