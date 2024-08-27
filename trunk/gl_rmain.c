@@ -112,6 +112,7 @@ qboolean OnChange_r_skybox (cvar_t *var, char *string);
 cvar_t	r_skybox = {"r_skybox", "", 0, OnChange_r_skybox };
 qboolean OnChange_r_skyfog(cvar_t *var, char *string);
 cvar_t	r_skyfog = { "r_skyfog", "0.5", 0, OnChange_r_skyfog };
+cvar_t	r_skyfog_default = { "r_skyfog_default", "0.5" };
 cvar_t	r_scale = { "r_scale", "1" };
 
 cvar_t	gl_clear = {"gl_clear", "1"};
@@ -3506,6 +3507,7 @@ void R_Init (void)
 	Cvar_Register (&r_skybox);
 	Cvar_Register (&r_farclip);
 	Cvar_Register (&r_skyfog);
+	Cvar_Register (&r_skyfog_default);
 	Cvar_Register (&r_scale);
 	Cvar_Register(&r_waterquality);
 	Cvar_Register(&r_oldwater);
@@ -3714,8 +3716,10 @@ void R_ScaleView(void)
 	glViewport(srcx, srcy, r_refdef.vrect.width, r_refdef.vrect.height);
 
 	glMatrixMode(GL_PROJECTION);
+	glPushMatrix();
 	glLoadIdentity();
 	glMatrixMode(GL_MODELVIEW);
+	glPushMatrix();
 	glLoadIdentity();
 
 	// correction factor if we lack NPOT textures, normally these are 1.0f
@@ -3732,6 +3736,11 @@ void R_ScaleView(void)
 	glTexCoord2f(0, tmax);
 	glVertex2f(-1, 1);
 	glEnd();
+
+	glMatrixMode(GL_PROJECTION);
+	glPopMatrix();
+	glMatrixMode(GL_MODELVIEW);
+	glPopMatrix();
 
 	// clear cached binding
 	currenttexture = -1;
