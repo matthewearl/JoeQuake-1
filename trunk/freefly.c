@@ -3,16 +3,29 @@
 
 cvar_t	freefly_speed = {"freefly_speed", "800"};
 
-extern kbutton_t	in_freeflymove, in_forward, in_back, in_moveleft, in_moveright, in_up, in_down, in_jump;
+extern kbutton_t	in_freeflymlook, in_forward, in_back, in_moveleft, in_moveright, in_up, in_down, in_jump;
 
 static void FreeFly_Toggle_f (void)
 {
+	if (!cls.demoplayback)
+	{
+		Con_Printf("Must be playing a demo to enable freefly.\n");
+		cl.freefly_enabled = false;
+		return;
+	}
+
 	cl.freefly_enabled = !cl.freefly_enabled;
 
 	if (cl.freefly_enabled)
 	{
+		Con_Printf("Freefly enabled.");
+		if (cl_demoui.value != 0)
+			Con_Printf(" Hold mouse2 or bind +freeflymlook to change view.");
+		Con_Printf("\n");
 		cl.freefly_reset = true;
 		cl.freefly_last_time = Sys_DoubleTime();
+	} else {
+		Con_Printf("Freefly disabled.\n");
 	}
 }
 
@@ -98,9 +111,10 @@ static void FreeFly_CopyCam_f (void)
 }
 
 
-qboolean FreeFly_Moving (void)
+qboolean FreeFly_MLook (void)
 {
-	return cl.freefly_enabled && (in_freeflymove.state & 1);
+	return cl.freefly_enabled
+		&& (cl_demoui.value == 0 || (in_freeflymlook.state & 1) || demoui_freefly_mlook);
 }
 
 
@@ -127,7 +141,7 @@ void FreeFly_SetRefdef (void)
 
 void FreeFly_MouseMove (double x, double y)
 {
-	if (!FreeFly_Moving())
+	if (!FreeFly_MLook())
 		return;
 
 	cl.freefly_angles[YAW] -= m_yaw.value * x;
@@ -146,7 +160,7 @@ void FreeFly_UpdateOrigin (void)
 	frametime = time - cl.freefly_last_time;
 	cl.freefly_last_time = time;
 
-	if (!FreeFly_Moving())
+	if (!cl.freefly_enabled)
 		return;
 
 	AngleVectors (cl.freefly_angles, forward, right, up);

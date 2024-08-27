@@ -101,6 +101,13 @@ Applies fog on the sky, valid values are from `0.0` to `1.0`. Used implicitly by
 It is only used if fog is also applied by using the `fog` command.
 Default value is `0.5`.
 
+##### `r_skyfog_default`
+
+Same as `r_skyfog`, but is used to initialize the fog amount at the start of a map only.
+Once `r_skyfog` is changed, it overrides this value.
+This is a workaround for when mods do not reset `r_skyfog` at the start of a map, causing whatever value from the end of the previous map to be used instead, which may not be intended.
+Default value is `0.5`.
+
 ##### `r_noshadow_list`
 
 Ignores drawing shadow for mdl files added to this list.
@@ -297,6 +304,12 @@ Set the speed the camera moves when in freefly mode.  `800` by default.
 Switches on alternative noclip movement where the player always moves towards
 the direction he's looking at.
 `1` by default.
+
+##### `sv_override_spawnparams`
+
+Allows to enable or disable overriding the spawn parameters on every spawn of a player.
+The overriding values can be set using the command `setspawnparam <paramnum> <value> [0]`.
+This allows to set starting stats for when starting levels with the `map` or `record` commands, e.g. for singleplayer segmented runs.
 
 ##### `sv_noclipspeed`
 
@@ -1040,14 +1053,21 @@ This command primarly aims to keep JoeQuake compatible with mods.
 ##### `freefly`
 
 Toggle freefly mode.  This is a free flying third-person camera that can be used
-during demo playback.  See below for how to control the camera.
+during demo playback.  When enabled, the usual inputs will manipulate the
+camera's position and angle (`+moveleft`, `+moveright`, `+forward`, `+back`,
+mouse movements, etc).
+
+If the demo UI is enabled (`cl_demoui 1`) then click and drag with mouse2 to
+change the camera angle, or bind `+freeflymove` (see below).  If the demo UI is
+disabled (`cl_demoui 0`) then mouse movements will effect the camera angle
+without need for extra key or button presses.
 
 ##### `+freeflymove` / `-freeflymove`
 
-Enable movement of the camera in freefly mode.  When enabled, the usual inputs
-will manipulate the camera's position (`+moveleft`, `+moveright`, `+forward`,
-`+back`, mouse movements, etc).  You'll typically want to bind this to a key,
-which should be held down to move the camera.
+When using freefly mode with the demo UI, this command makes mouse movements
+adjust the camera angle.  Use this as an alternative to mouse2.  You'll
+typically want to bind this to a key, which should be held down to adjust the
+camera angle.
 
 ##### `freefly_copycam`
 

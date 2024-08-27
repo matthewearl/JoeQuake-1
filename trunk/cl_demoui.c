@@ -3,6 +3,7 @@
 #define SPEED_DRAW_CHARS	6
 #define MAP_NAME_DRAW_CHARS	12
 #define PAUSE_PLAY_CHARS	2
+#define FREEFLY_CHARS	4
 
 
 typedef struct
@@ -14,6 +15,7 @@ typedef struct
 	int skip_prev_x, skip_next_x, skip_y;
 	int time_y;
 	int speed_prev_x, speed_next_x, speed_y;
+	int freefly_x, freefly_y;
 	int map_min_num, map_max_num, map_x, map_y, map_width, map_height;
 } layout_t;
 
@@ -29,10 +31,12 @@ typedef enum
 	HOVER_SPEED_PREV,
 	HOVER_SPEED,
 	HOVER_SPEED_NEXT,
+	HOVER_FREEFLY,
 } hover_t;
 
 
 qboolean demoui_dragging_seek;
+qboolean demoui_freefly_mlook;
 static double last_event_time = -1.0f;
 static qboolean over_ui = false;
 static qboolean map_menu_open = false;
@@ -125,6 +129,10 @@ GetUILayout (layout_t *layout, int map_num)
 	// Level selector
 	layout->map_x = (int)(vid.width - show_frac * layout->char_size * MAP_NAME_DRAW_CHARS);
 	layout->map_width = (1 + MAP_NAME_DRAW_CHARS) * layout->char_size;
+
+	// Freefly toggle
+	layout->freefly_x = layout->skip_prev_x - layout->char_size * (FREEFLY_CHARS + 1);
+	layout->freefly_y = layout->top + layout->char_size / 2;
 
 	centre_y = (vid.height - backdrop_height - layout->char_size) / 2;
 	rows_above = max(0, centre_y / layout->char_size);
@@ -223,6 +231,13 @@ UpdateHover (layout_t *layout, const mouse_state_t* ms)
 	{
 		hover = HOVER_SPEED;
 	}
+	else if (ms->y >= layout->freefly_y
+		&& ms->y < layout->freefly_y + layout->char_size
+		&& ms->x >= layout->freefly_x
+		&& ms->x < layout->freefly_x + FREEFLY_CHARS * layout->char_size)
+	{
+		hover = HOVER_FREEFLY;
+	}
 
 	if (map_menu_open
 		&& ms->x >= layout->map_x
@@ -263,7 +278,12 @@ qboolean DemoUI_MouseEvent(const mouse_state_t* ms)
 	UpdateHover(&layout, ms);
 	over_ui = ms->y > layout.top || (map_menu_open && hover_map_idx != -1);
 
-	if (ms->button_down == 1)
+	demoui_freefly_mlook = ms->buttons[2];
+	if (ms->button_down == 2 || ms->button_up == 2)
+	{
+		handled = true;
+	}
+	else if (ms->button_down == 1)
 	{
 		handled = true;
 		switch (hover)
@@ -283,6 +303,8 @@ qboolean DemoUI_MouseEvent(const mouse_state_t* ms)
 				ChangeSpeed(1); break;
 			case HOVER_SPEED_PREV:
 				ChangeSpeed(-1); break;
+			case HOVER_FREEFLY:
+				Cmd_ExecuteString("freefly", src_command); break;
 			default:
 				handled = false; break;
 		}
@@ -366,6 +388,7 @@ qboolean DemoUI_MouseEvent(const mouse_state_t* ms)
 			map_menu_open = false;
 		else
 			Cmd_ExecuteString("pause", src_command);
+		handled = true;
 	}
 
 	return handled;
@@ -404,6 +427,36 @@ TimeToSeekbarPos (double time, dseek_map_info_t *dsmi, layout_t *layout)
 }
 
 
+static char *
+Get_TooltipText (void)
+{
+	char *tooltip_text;
+	switch (hover)
+	{
+		case HOVER_PLAY_PAUSE:
+			tooltip_text = "toggle play/pause"; break;
+		case HOVER_SEEK:
+			tooltip_text = "seek through current level"; break;
+		case HOVER_SKIP_NEXT:
+			tooltip_text = "skip to next level in marathon"; break;
+		case HOVER_SKIP:
+			tooltip_text = "toggle marathon level menu"; break;
+		case HOVER_SKIP_PREV:
+			tooltip_text = "skip to previous level in marathon"; break;
+		case HOVER_SPEED_NEXT:
+		case HOVER_SPEED:
+			tooltip_text = "cycle forwards through playback speeds"; break;
+		case HOVER_SPEED_PREV:
+			tooltip_text = "cycle backwards through playback speeds"; break;
+		case HOVER_FREEFLY:
+			tooltip_text = "toggle between freefly (1) and first person view (0)"; break;
+		default:
+			tooltip_text = "";
+	}
+	return tooltip_text;
+}
+
+
 void DemoUI_Draw(void)
 {
 	float sbar_scale = Sbar_GetScaleAmount();
@@ -415,6 +468,7 @@ void DemoUI_Draw(void)
 	dseek_map_info_t *dsmi;
 	int map_num;
 	layout_t layout;
+	char *tooltip_text;
 
 	dsmi = CL_DemoGetCurrentMapInfo (&map_num);
 	if (dsmi == NULL)
@@ -522,5 +576,27 @@ void DemoUI_Draw(void)
 				Draw_String(layout.map_x + layout.char_size, y,
 							demo_seek_info.maps[i].name, true);
 		}
+	}
+
+	// Freefly
+	if (hover == HOVER_FREEFLY)
+		Draw_String(layout.freefly_x, layout.freefly_y, "FF:", true);
+	else
+		Draw_Alt_String(layout.freefly_x, layout.freefly_y, "FF:", true);
+	if (cl.freefly_enabled)
+		Draw_String(layout.freefly_x + layout.char_size * 3, layout.freefly_y, "1", true);
+	else
+		Draw_String(layout.freefly_x + layout.char_size * 3, layout.freefly_y, "0", true);
+
+	// Tooltip
+	tooltip_text = Get_TooltipText();
+	if (tooltip_text[0] != '\0')
+	{
+		Draw_AlphaFill(vid.width - layout.char_size * strlen(tooltip_text) - (layout.char_size >> 2),
+						layout.top - 3 * (layout.char_size >> 1),
+						((layout.char_size >> 2) + layout.char_size * strlen(tooltip_text)) / sbar_scale,
+						3 * (layout.char_size >> 1) / sbar_scale, 0, 0.7);
+		Draw_String(vid.width - layout.char_size * strlen(tooltip_text),
+					layout.top - 5 * (layout.char_size >> 2), tooltip_text, true);
 	}
 }
