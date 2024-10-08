@@ -19,7 +19,7 @@ jobs:
         msbuild Windows/VisualStudio/JoeQuake.vcxproj /p:Configuration="SDL Release" /p:Platform=Win32
 
     - name: Upload SDL Executable as Artifact
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: joequake-sdl
         path: Windows/VisualStudio/release_sdl/joequake-gl-sdl.exe
@@ -29,7 +29,7 @@ jobs:
         msbuild Windows/VisualStudio/JoeQuake.vcxproj /p:Configuration="GL Release" /p:Platform=Win32
 
     - name: Upload GL Executable as Artifact
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v4
       with:
         name: joequake-gl
         path: Windows/VisualStudio/release_gl/joequake-gl.exe
