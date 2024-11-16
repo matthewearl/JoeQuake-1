@@ -114,6 +114,8 @@ qboolean OnChange_r_skyfog(cvar_t *var, char *string);
 cvar_t	r_skyfog = { "r_skyfog", "0.5", 0, OnChange_r_skyfog };
 cvar_t	r_skyfog_default = { "r_skyfog_default", "0.5" };
 cvar_t	r_scale = { "r_scale", "1" };
+qboolean OnChange_r_ambient(cvar_t *var, char *string);
+cvar_t	r_ambient = { "r_ambient", "0", 0, OnChange_r_ambient };
 
 cvar_t	gl_clear = {"gl_clear", "1"};
 cvar_t	gl_cull = {"gl_cull", "1"};
@@ -1889,7 +1891,7 @@ void R_DrawAliasModel (entity_t *ent)
 	}
 	else if (ent == &cl.viewent)
 	{
-		float	scale = 1.0f, fovscale = 1.0f;
+		float	fovscale = 1.0f;
 		int		hand_offset = cl_hand.value == 1 ? -3 : cl_hand.value == 2 ? 3 : 0;
 		extern cvar_t scr_fov, cl_gun_fovscale;
 
@@ -1900,9 +1902,7 @@ void R_DrawAliasModel (entity_t *ent)
 		}
 
 		glTranslatef (paliashdr->scale_origin[0], (paliashdr->scale_origin[1] * fovscale) + hand_offset, paliashdr->scale_origin[2] * fovscale);
-
-		scale = (scr_fov.value > 90) ? 1 - ((scr_fov.value - 90) / 250) : 1;
-		glScalef (paliashdr->scale[0] * scale, paliashdr->scale[1] * fovscale, paliashdr->scale[2] * fovscale);
+		glScalef (paliashdr->scale[0], paliashdr->scale[1] * fovscale, paliashdr->scale[2] * fovscale);
 	}
 	else
 	{
@@ -2993,14 +2993,18 @@ void R_DrawQ3Model (entity_t *ent)
 
 	if (ent == &cl.viewent)
 	{
-		float scale = 1;
-		int hand_offset = cl_hand.value == 1 ? -3 : cl_hand.value == 2 ? 3 : 0;
-		extern cvar_t scr_fov;
+		float	fovscale = 1.0f;
+		int		hand_offset = cl_hand.value == 1 ? -3 : cl_hand.value == 2 ? 3 : 0;
+		extern cvar_t scr_fov, cl_gun_fovscale;
 
-		glTranslatef (md3_scale_origin[0], md3_scale_origin[1] + hand_offset, md3_scale_origin[2]);
+		if (scr_fov.value > 90.f && cl_gun_fovscale.value)
+		{
+			fovscale = tan(scr_fov.value * (0.5f * M_PI / 180.f));
+			fovscale = 1.f + (fovscale - 1.f) * cl_gun_fovscale.value;
+		}
 
-		scale = (scr_fov.value > 90) ? 1 - ((scr_fov.value - 90) / 250) : 1;
-		glScalef (scale, 1, 1);
+		glTranslatef (md3_scale_origin[0], (md3_scale_origin[1] * fovscale) + hand_offset, md3_scale_origin[2] * fovscale);
+		glScalef (1.0f, fovscale, fovscale);
 	}
 	else
 	{
@@ -3739,9 +3743,10 @@ void R_Init (void)
 	Cvar_Register (&r_skyfog);
 	Cvar_Register (&r_skyfog_default);
 	Cvar_Register (&r_scale);
-	Cvar_Register(&r_waterquality);
-	Cvar_Register(&r_oldwater);
-	Cvar_Register(&r_waterwarp);
+	Cvar_Register (&r_ambient);
+	Cvar_Register (&r_waterquality);
+	Cvar_Register (&r_oldwater);
+	Cvar_Register (&r_waterwarp);
 
 	Cvar_Register (&gl_finish);
 	Cvar_Register (&gl_clear);

@@ -354,7 +354,7 @@ void R_BuildLightMap (msurface_t *surf, byte *dest, int stride)
 {
 	int			smax, tmax, i, j, size, maps, r, g, b, blocksize;
 	byte		*lightmap;
-	unsigned	scale, *bl;
+	unsigned	scale, *bl, ambient_light;
 
 	surf->cached_dlight = (surf->dlightframe == r_framecount);
 
@@ -368,6 +368,16 @@ void R_BuildLightMap (msurface_t *surf, byte *dest, int stride)
 	{
 		// clear to no light
 		memset(&blocklights[0], 0, size * 3 * sizeof(unsigned int)); //johnfitz -- lit support via lordhavoc
+
+		// clear to ambient
+		bl = blocklights;
+		ambient_light = (unsigned int)(max(0, r_ambient.value)) << 8;
+		for (i = 0; i < size; i++)
+		{
+			*bl++ = ambient_light;
+			*bl++ = ambient_light;
+			*bl++ = ambient_light;
+		}
 
 		// add all the lightmaps
 		if (lightmap)
@@ -579,6 +589,19 @@ qboolean OnChange_gl_overbright(cvar_t *var, char *string)
 		return false;
 
 	Cvar_SetValue(&gl_overbright, newval);
+	R_RebuildAllLightmaps();
+
+	return true;
+}
+
+qboolean OnChange_r_ambient(cvar_t *var, char *string)
+{
+	float	newval = Q_atof(string);
+
+	if (newval == r_ambient.value)
+		return false;
+
+	Cvar_SetValue(&r_ambient, newval);
 	R_RebuildAllLightmaps();
 
 	return true;
