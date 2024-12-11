@@ -57,12 +57,13 @@ cvar_t	cl_demorewind = {"cl_demorewind", "0"};
 cvar_t	cl_bobbing = {"cl_bobbing", "0"};
 cvar_t	cl_deadbodyfilter = {"cl_deadbodyfilter", "0"};
 cvar_t	cl_gibfilter = {"cl_gibfilter", "0"};
+static cvar_t	cl_bbox = {"cl_bbox", "0"};
 cvar_t	cl_maxfps = {"cl_maxfps", "72", CVAR_SERVER};
 cvar_t	cl_advancedcompletion = {"cl_advancedcompletion", "1"};
 cvar_t	cl_independentphysics = {"cl_independentphysics", "1", CVAR_INIT};
 cvar_t	cl_viewweapons = {"cl_viewweapons", "0"};
 cvar_t	cl_autodemo = { "cl_autodemo", "0" };
-cvar_t	cl_autodemo_name = { "cl_autodemo_name", "" };
+cvar_t	cl_autodemo_format = { "cl_autodemo_format", "#map#_#time#_#skill#_#player#" };
 cvar_t	cl_demoui = {"cl_demoui", "1", CVAR_ARCHIVE};
 cvar_t	cl_demouitimeout = {"cl_demouitimeout", "2.5", CVAR_ARCHIVE};
 cvar_t	cl_demouihidespeed = {"cl_demouihidespeed", "2", CVAR_ARCHIVE};
@@ -90,6 +91,38 @@ qboolean		r_loadq3player = false;
 extern qboolean physframe;
 extern double physframetime;
 extern char *skill_modes[];
+
+// Sphere -- Helper struct for LiveSplit autosplitter to automatically get the
+// correct memory addresses that it needs.
+// Ideally we should mark this to be packed, but luckily that seems to be done
+// already anyways with every member just being 4 bytes. So we can avoid that
+// platform-dependent code.
+// Make it volatile so that it is not optimized away by the compiler.
+volatile static struct {
+	unsigned char magic_identifier[40];
+	double* qdqstats_total_time;
+	double* ctime;
+	int* gamestate;
+	const char* mapname;
+	int reconnect_counter;
+} speedrun_exports_livesplit = {
+	{0x6D, 0x61, 0x67, 0x69, 0x63, 0x20,                    // magic
+	 0x69, 0x64, 0x20,                                      // id
+	 0x66, 0x6F, 0x72, 0x20,                                // for
+	 0x73, 0x70, 0x65, 0x65, 0x64, 0x72, 0x75, 0x6E, 0x20,  // speedrun
+	 0x64, 0x61, 0x74, 0x61, 0x20,                          // data
+	 0x66, 0x6F, 0x72, 0x20,                                // for
+	 0x6C, 0x69, 0x76, 0x65, 0x73, 0x70, 0x6C, 0x69, 0x74}, // livesplit
+	&cls.marathon_time,
+	&cl.ctime,
+	&cl.intermission,
+	sv.name,
+	0
+};
+
+void CL_CountReconnects(void) {
+	speedrun_exports_livesplit.reconnect_counter += 1;
+}
 
 unsigned CheckModel (char *mdl);
 
@@ -360,10 +393,7 @@ void CL_SignonReply (void)
 		SCR_EndLoadingPlaque ();	// allow normal screen updates
 		if (cl_autodemo.value && !cls.demoplayback && !cls.demorecording)
 		{
-			if (cl_autodemo_name.string[0])
-				Cmd_ExecuteString(va("record %s\n", cl_autodemo_name.string), src_command);
-			else
-				Cmd_ExecuteString("record\n", src_command);
+			Cmd_ExecuteString("record current\n", src_command);
 		}
 		if (!pr_qdqstats && !cls.demoplayback && sv.active)
 		{
@@ -704,6 +734,14 @@ void GetQuake3ViewWeaponModel(int *vwep_modelindex)
 	}
 }
 
+
+
+qboolean CL_ShowBBoxes(void)
+{
+	return cl_bbox.value && !cls.demorecording;
+}
+
+
 qboolean r_loadviewweapons = false;
 entity_t view_weapons[MAX_SCOREBOARD];
 
@@ -816,8 +854,9 @@ void CL_RelinkEntities (void)
 			}
 		}
 
-		if (cl_deadbodyfilter.value && ent->model->type == mod_alias && 
-			Model_isDead(ent->modelindex, ent->frame))
+		if (cl_deadbodyfilter.value &&
+				!CL_ShowBBoxes() && ent->model->type == mod_alias && 
+				Model_isDead(ent->modelindex, ent->frame))
 			continue;
 
 		if (cl_gibfilter.value && ent->model->type == mod_alias && 
@@ -1445,12 +1484,13 @@ void CL_Init (void)
 	Cvar_Register (&cl_bobbing);
 	Cvar_Register (&cl_deadbodyfilter);
 	Cvar_Register (&cl_gibfilter);
+	Cvar_Register (&cl_bbox);
 	Cvar_Register (&cl_maxfps);
 	Cvar_Register (&cl_advancedcompletion);
 	Cvar_Register (&cl_independentphysics);
 	Cvar_Register (&cl_viewweapons);
 	Cvar_Register(&cl_autodemo);
-	Cvar_Register(&cl_autodemo_name);
+	Cvar_Register(&cl_autodemo_format);
 	Cvar_Register(&cl_demoui);
 	Cvar_Register(&cl_demouitimeout);
 	Cvar_Register(&cl_demouihidespeed);

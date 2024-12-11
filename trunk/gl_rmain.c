@@ -114,6 +114,8 @@ qboolean OnChange_r_skyfog(cvar_t *var, char *string);
 cvar_t	r_skyfog = { "r_skyfog", "0.5", 0, OnChange_r_skyfog };
 cvar_t	r_skyfog_default = { "r_skyfog_default", "0.5" };
 cvar_t	r_scale = { "r_scale", "1" };
+qboolean OnChange_r_ambient(cvar_t *var, char *string);
+cvar_t	r_ambient = { "r_ambient", "0", 0, OnChange_r_ambient };
 
 cvar_t	gl_clear = {"gl_clear", "1"};
 cvar_t	gl_cull = {"gl_cull", "1"};
@@ -174,6 +176,82 @@ float	pitch_rot;
 #if 0
 float	q3legs_rot;
 #endif
+
+typedef struct
+{
+	int frame_min;
+	int frame_max;
+} frame_range_t;
+
+typedef struct
+{
+	modelindex_t mi;
+	vec3_t mins, maxs;
+	frame_range_t not_solid_frames[3];  // null terminated
+} id1_bbox_t;
+
+static id1_bbox_t id1_bboxes[] = {
+	// player
+	{mi_player, {-16, -16, -24}, {16, 16, 32}, {{41, 103}}},
+	{mi_eyes, {-16, -16, -24}, {16, 16, 32}},
+
+	// monsters
+	{mi_boss, {-128, -128, -24}, {128, 128, 256}},
+	{mi_fiend, {-32, -32, -24}, {32, 32, 64}, {{50, 54}}},
+	{mi_dog, {-32, -32, -24}, {32, 32, 40}, {{8, 26}}},
+	{mi_enforcer, {-16, -16, -24}, {16, 16, 40}, {{43, 55}, {57, 66}}},
+	{mi_fish, {-16, -16, -24}, {16, 16, 24}, {{38, 39}}},
+	{mi_hknight, {-16, -16, -24}, {16, 16, 40}, {{44, 54}, {56, 63}}},
+	{mi_knight, {-16, -16, -24}, {16, 16, 40}, {{78, 86}, {88, 97}}},
+	{mi_ogre, {-32, -32, -24}, {32, 32, 64}, {{114, 126}, {128, 136}}},
+	{mi_oldone, {-160, -128, -24}, {160, 128, 256}},
+	{mi_vore, {-32, -32, -24}, {32, 32, 64}, {{16, 23}}},
+	{mi_shambler, {-32, -32, -24}, {32, 32, 64}, {{85, 94}}},
+	{mi_soldier, {-16, -16, -24}, {16, 16, 40}, {{10, 18}, {20, 29}}},
+	{mi_spawn, {-16, -16, -24}, {16, 16, 40}},
+	{mi_scrag, {-16, -16, -24}, {16, 16, 40}, {{48, 54}}},
+	{mi_zombie, {-16, -16, -24}, {16, 16, 40}, {{171, 173}}},
+
+	// bsp items
+	{mi_i_bh10, {-16, -16, -1}, {48, 48, 57}},
+	{mi_i_bh25, {-16, -16, -1}, {48, 48, 57}},
+	{mi_i_bh100, {-16, -16, -1}, {48, 48, 57}},
+	{mi_i_shell0, {-16, -16, -1}, {48, 48, 57}},
+	{mi_i_shell1, {-16, -16, -1}, {48, 48, 57}},
+	{mi_i_nail0, {-16, -16, -1}, {48, 48, 57}},
+	{mi_i_nail1, {-16, -16, -1}, {48, 48, 57}},
+	{mi_i_rock0, {-16, -16, -1}, {48, 48, 57}},
+	{mi_i_rock1, {-16, -16, -1}, {48, 48, 57}},
+	{mi_i_batt0, {-16, -16, -1}, {48, 48, 57}},
+	{mi_i_batt1, {-16, -16, -1}, {48, 48, 57}},
+
+	// mdl items
+	{mi_i_quad, {-32, -32, -25}, {32, 32, 33}},
+	{mi_i_invuln, {-32, -32, -25}, {32, 32, 33}},
+	{mi_i_suit, {-32, -32, -25}, {32, 32, 33}},
+	{mi_i_invis, {-32, -32, -25}, {32, 32, 33}},
+	{mi_i_armor, {-32, -32, -1}, {32, 32, 57}},
+	{mi_i_shot, {-32, -32, -1}, {32, 32, 57}},
+	{mi_i_nail, {-32, -32, -1}, {32, 32, 57}},
+	{mi_i_nail2, {-32, -32, -1}, {32, 32, 57}},
+	{mi_i_rock, {-32, -32, -1}, {32, 32, 57}},
+	{mi_i_rock2, {-32, -32, -1}, {32, 32, 57}},
+	{mi_i_light, {-32, -32, -1}, {32, 32, 57}},
+	{mi_i_wskey, {-32, -32, -25}, {32, 32, 33}},
+	{mi_i_mskey, {-32, -32, -25}, {32, 32, 33}},
+	{mi_i_wgkey, {-32, -32, -25}, {32, 32, 33}},
+	{mi_i_mgkey, {-32, -32, -25}, {32, 32, 33}},
+	{mi_i_end1, {-32, -32, -25}, {32, 32, 33}},
+	{mi_i_end2, {-32, -32, -25}, {32, 32, 33}},
+	{mi_i_end3, {-32, -32, -25}, {32, 32, 33}},
+	{mi_i_end4, {-32, -32, -25}, {32, 32, 33}},
+	{mi_i_backpack, {-32, -32, -1}, {32, 32, 57}},
+
+	// misc
+	{mi_explobox, {0, 0, 0}, {32, 32, 64}},
+
+	{NUM_MODELINDEX}
+};
 
 void R_MarkSurfaces(void);
 void R_InitBubble (void);
@@ -400,28 +478,28 @@ float R_CalculateLerpfracForEntity(entity_t *ent)
 	// if LERP_RESETMOVE, kill any lerps in progress
 	if (ent->lerpflags & LERP_RESETMOVE)
 	{
-		ent->translate_start_time = 0;
-		VectorCopy (ent->origin, ent->origin1);
-		VectorCopy (ent->origin, ent->origin2);
-		VectorCopy(ent->angles, ent->angles1);
-		VectorCopy(ent->angles, ent->angles2);
+		ent->movelerpstart = 0;
+		VectorCopy (ent->origin, ent->previousorigin);
+		VectorCopy (ent->origin, ent->currentorigin);
+		VectorCopy (ent->angles, ent->previousangles);
+		VectorCopy (ent->angles, ent->currentangles);
 		ent->lerpflags -= LERP_RESETMOVE;
 	}
-	else if (!VectorCompare(ent->origin, ent->origin2) || !VectorCompare(ent->angles, ent->angles2)) // origin/angles changed, start new lerp
+	else if (!VectorCompare(ent->origin, ent->currentorigin) || !VectorCompare(ent->angles, ent->currentangles)) // origin/angles changed, start new lerp
 	{
-		ent->translate_start_time = cl.time;
-		VectorCopy (ent->origin2, ent->origin1);
-		VectorCopy (ent->origin,  ent->origin2);
-		VectorCopy(ent->angles2, ent->angles1);
-		VectorCopy(ent->angles, ent->angles2);
+		ent->movelerpstart = cl.time;
+		VectorCopy (ent->currentorigin, ent->previousorigin);
+		VectorCopy (ent->origin,  ent->currentorigin);
+		VectorCopy (ent->currentangles, ent->previousangles);
+		VectorCopy (ent->angles, ent->currentangles);
 	}
 
 	if (gl_interpolate_moves.value && ent->lerpflags & LERP_MOVESTEP)
 	{
 		if (ent->lerpflags & LERP_FINISH)
-			lerpfrac = bound(0, (cl.time - ent->translate_start_time) / (ent->frame_finish_time - ent->translate_start_time), 1);
+			lerpfrac = bound(0, (cl.time - ent->movelerpstart) / (ent->lerpfinish - ent->movelerpstart), 1);
 		else
-			lerpfrac = bound(0, (cl.time - ent->translate_start_time) / 0.1, 1);
+			lerpfrac = bound(0, (cl.time - ent->movelerpstart) / 0.1, 1);
 	}
 	else
 		lerpfrac = 1;
@@ -433,7 +511,7 @@ void R_DoEntityTranslate(entity_t *ent, float lerpfrac)
 {
 	vec3_t	interpolated;
 
-	VectorInterpolate (ent->origin1, lerpfrac, ent->origin2, interpolated);
+	VectorInterpolate (ent->previousorigin, lerpfrac, ent->currentorigin, interpolated);
 	glTranslatef (interpolated[0], interpolated[1], interpolated[2]);
 }
 
@@ -442,7 +520,7 @@ void R_DoEntityRotate(entity_t *ent, float lerpfrac, qboolean shadow)
 	int		i;
 	vec3_t	d;
 
-	VectorSubtract (ent->angles2, ent->angles1, d);
+	VectorSubtract (ent->currentangles, ent->previousangles, d);
 
 	// always interpolate along the shortest path
 	for (i = 0 ; i < 3 ; i++)
@@ -453,10 +531,10 @@ void R_DoEntityRotate(entity_t *ent, float lerpfrac, qboolean shadow)
 			d[i] += 360;
 	}
 
-	glRotatef (ent->angles1[1] + (lerpfrac * d[1]), 0, 0, 1);
+	glRotatef (ent->previousangles[1] + (lerpfrac * d[1]), 0, 0, 1);
 	if (!shadow)
 	{
-		pitch_rot = -ent->angles1[0] + (-lerpfrac * d[0]);
+		pitch_rot = -ent->previousangles[0] + (-lerpfrac * d[0]);
 
 		// skip pitch rotation for the legs model
 		if (ent->modelindex != cl_modelindex[mi_q3legs])
@@ -477,7 +555,7 @@ void R_DoEntityRotate(entity_t *ent, float lerpfrac, qboolean shadow)
 			VectorCopy(ent->origin, oldorigin);
 		}
 #endif
-		glRotatef (ent->angles1[2] + (lerpfrac * d[2]), 1, 0, 0);
+		glRotatef (ent->previousangles[2] + (lerpfrac * d[2]), 1, 0, 0);
 	}
 }
 
@@ -501,13 +579,18 @@ void R_RotateForEntityWithLerp (entity_t *ent, qboolean shadow)
 R_RotateForEntity
 =============
 */
-void R_RotateForEntity (entity_t *ent)
+void R_RotateForEntity (vec3_t origin, vec3_t angles, unsigned char scale)
 {
-	glTranslatef (ent->origin[0], ent->origin[1], ent->origin[2]);
+	float scalefactor = ENTSCALE_DECODE(scale);
+	
+	glTranslatef (origin[0], origin[1], origin[2]);
 
-	glRotatef (ent->angles[1], 0, 0, 1);
-	glRotatef (-ent->angles[0], 0, 1, 0);
-	glRotatef (ent->angles[2], 1, 0, 0);
+	glRotatef (angles[1], 0, 0, 1);
+	glRotatef (-angles[0], 0, 1, 0);
+	glRotatef (angles[2], 1, 0, 0);
+
+	if (scalefactor != 1.0f)
+		glScalef(scalefactor, scalefactor, scalefactor);
 }
 
 /*
@@ -666,6 +749,16 @@ static qboolean	overbright; //johnfitz
 static qboolean shading = true; //johnfitz -- if false, disable vertex shading for various reasons (fullbright, r_lightmap, showtris, etc)
 
 float	apitch, ayaw;
+
+//johnfitz -- struct for passing lerp information to drawing functions
+typedef struct {
+	short pose1;
+	short pose2;
+	float blend;
+	vec3_t origin;
+	vec3_t angles;
+} lerpdata_t;
+//johnfitz
 
 static GLuint r_alias_program;
 
@@ -913,67 +1006,18 @@ Supports optional overbright, optional fullbright pixels.
 Based on code by MH from RMQEngine
 =============
 */
-void R_DrawAliasFrame_GLSL(int frame, aliashdr_t *paliashdr, entity_t *ent, int distance, int gl_texture, int fb_texture, qboolean islumaskin)
+void R_DrawAliasFrame_GLSL(aliashdr_t *paliashdr, lerpdata_t lerpdata, entity_t *ent, int distance, int gl_texture, int fb_texture, qboolean islumaskin)
 {
 	extern GLuint	tbo_tex;
-	int			posenum, numposes;
+	float			blend;
 
-	if ((frame >= paliashdr->numframes) || (frame < 0))
+	if (lerpdata.pose1 != lerpdata.pose2)
 	{
-		Con_DPrintf("R_DrawAliasFrame_GLSL: no such frame %d\n", frame);
-		frame = 0;
+		blend = lerpdata.blend;
 	}
-
-	posenum = paliashdr->frames[frame].firstpose;
-	numposes = paliashdr->frames[frame].numposes;
-
-	if (numposes > 1)
+	else // poses the same means either 1. the entity has paused its animation, or 2. r_lerpmodels is disabled
 	{
-		ent->frame_interval = paliashdr->frames[frame].interval;
-		posenum += (int)(cl.time / ent->frame_interval) % numposes;
-	}
-	else
-	{
-		ent->frame_interval = 0.1;
-	}
-
-	if (ent->lerpflags & LERP_RESETANIM) //kill any lerp in progress
-	{
-		ent->frame_start_time = 0;
-		ent->pose1 = posenum;
-		ent->pose2 = posenum;
-		ent->lerpflags -= LERP_RESETANIM;
-	}
-	else if (ent->pose2 != posenum) // pose changed, start new lerp
-	{
-		if (ent->lerpflags & LERP_RESETANIM2) //defer lerping one more time
-		{
-			ent->frame_start_time = 0;
-			ent->pose1 = posenum;
-			ent->pose2 = posenum;
-			ent->lerpflags -= LERP_RESETANIM2;
-		}
-		else
-		{
-			ent->frame_start_time = cl.time;
-			ent->pose1 = ent->pose2;
-			ent->pose2 = posenum;
-		}
-	}
-
-	//set up values
-	if (gl_interpolate_anims.value)
-	{
-		if (ent->lerpflags & LERP_FINISH && numposes == 1)
-			ent->framelerp = bound(0, (cl.time - ent->frame_start_time) / (ent->frame_finish_time - ent->frame_start_time), 1);
-		else
-			ent->framelerp = bound(0, (cl.time - ent->frame_start_time) / ent->frame_interval, 1);
-	}
-	else
-	{
-		ent->framelerp = 1;
-		ent->pose1 = posenum;
-		ent->pose2 = posenum;
+		blend = 0;
 	}
 
 	if (ISTRANSPARENT(ent))
@@ -991,14 +1035,14 @@ void R_DrawAliasFrame_GLSL(int frame, aliashdr_t *paliashdr, entity_t *ent, int 
 	qglEnableVertexAttribArray(pose2NormalAttrIndex);
 
 	qglVertexAttribPointer(texCoordsAttrIndex, 2, GL_FLOAT, GL_FALSE, 0, (void *)(intptr_t)currententity->model->vbostofs);
-	qglVertexAttribPointer(pose1VertexAttrIndex, 4, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(meshxyz_t), GLARB_GetXYZOffset(paliashdr, ent->pose1));
-	qglVertexAttribPointer(pose2VertexAttrIndex, 4, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(meshxyz_t), GLARB_GetXYZOffset(paliashdr, ent->pose2));
+	qglVertexAttribPointer(pose1VertexAttrIndex, 4, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(meshxyz_t), GLARB_GetXYZOffset(paliashdr, lerpdata.pose1));
+	qglVertexAttribPointer(pose2VertexAttrIndex, 4, GL_UNSIGNED_BYTE, GL_FALSE, sizeof(meshxyz_t), GLARB_GetXYZOffset(paliashdr, lerpdata.pose2));
 	// GL_TRUE to normalize the signed bytes to [-1 .. 1]
-	qglVertexAttribPointer(pose1NormalAttrIndex, 4, GL_BYTE, GL_TRUE, sizeof(meshxyz_t), GLARB_GetNormalOffset(paliashdr, ent->pose1));
-	qglVertexAttribPointer(pose2NormalAttrIndex, 4, GL_BYTE, GL_TRUE, sizeof(meshxyz_t), GLARB_GetNormalOffset(paliashdr, ent->pose2));
+	qglVertexAttribPointer(pose1NormalAttrIndex, 4, GL_BYTE, GL_TRUE, sizeof(meshxyz_t), GLARB_GetNormalOffset(paliashdr, lerpdata.pose1));
+	qglVertexAttribPointer(pose2NormalAttrIndex, 4, GL_BYTE, GL_TRUE, sizeof(meshxyz_t), GLARB_GetNormalOffset(paliashdr, lerpdata.pose2));
 
 	// set uniforms
-	qglUniform1f(blendLoc, ent->framelerp);
+	qglUniform1f(blendLoc, blend);
 	qglUniform1f(lerpDistLoc, distance);
 	qglUniform3f(shadevectorLoc, shadevector[0], shadevector[1], shadevector[2]);
 	qglUniform4f(lightColorLoc, lightcolor[0], lightcolor[1], lightcolor[2], ent->transparency);
@@ -1073,14 +1117,16 @@ void GL_PolygonOffset(int offset)
 R_DrawAliasOutlineFrame
 =============
 */
-void R_DrawAliasOutlineFrame(int frame, aliashdr_t *paliashdr, entity_t *ent, int distance)
+void R_DrawAliasOutlineFrame(aliashdr_t *paliashdr, lerpdata_t lerpdata, entity_t *ent, int distance)
 {
-	int			*order, count, pose, numposes;
+	int			*order, count;
 	vec3_t		interpolated_verts;
 	float		lerpfrac;
 	trivertx_t	*verts1, *verts2;
 	qboolean	lerpmdl = true;
 	float		line_width = draw_player_outlines ? bound(1, r_outline_players.value, 3) : bound(1, r_outline.value, 3);
+	float		blend;
+	qboolean	lerping;
 
 	// Don't draw outlines on transparent models, except when drawing wallhacked teammates
 	if (ent->transparency < 1.0f && !draw_player_outlines)
@@ -1101,20 +1147,23 @@ void R_DrawAliasOutlineFrame(int frame, aliashdr_t *paliashdr, entity_t *ent, in
 	GL_PolygonOffset(-0.7);
 	glDisable(GL_TEXTURE_2D);
 
-	if ((frame >= paliashdr->numframes) || (frame < 0))
+	if (lerpdata.pose1 != lerpdata.pose2)
 	{
-		Con_DPrintf("R_DrawAliasOutlineFrame: no such frame %d\n", frame);
-		frame = 0;
+		lerping = true;
+		verts1  = (trivertx_t *)((byte *)paliashdr + paliashdr->posedata);
+		verts2  = verts1;
+		verts1 += lerpdata.pose1 * paliashdr->poseverts;
+		verts2 += lerpdata.pose2 * paliashdr->poseverts;
+		blend = lerpdata.blend;
 	}
-
-	pose = paliashdr->frames[frame].firstpose;
-	numposes = paliashdr->frames[frame].numposes;
-
-	verts1 = (trivertx_t *)((byte *)paliashdr + paliashdr->posedata);
-	verts2 = verts1;
-
-	verts1 += ent->pose1 * paliashdr->poseverts;
-	verts2 += ent->pose2 * paliashdr->poseverts;
+	else // poses the same means either 1. the entity has paused its animation, or 2. r_lerpmodels is disabled
+	{
+		lerping = false;
+		verts1  = (trivertx_t *)((byte *)paliashdr + paliashdr->posedata);
+		verts2  = verts1; // avoid bogus compiler warning
+		verts1 += lerpdata.pose1 * paliashdr->poseverts;
+		blend = 0; // avoid bogus compiler warning
+	}
 
 	order = (int *)((byte *)paliashdr + paliashdr->commands);
 
@@ -1124,22 +1173,32 @@ void R_DrawAliasOutlineFrame(int frame, aliashdr_t *paliashdr, entity_t *ent, in
 		if (count < 0)
 		{
 			count = -count;
-
 			glBegin(GL_TRIANGLE_FAN);
 		}
 		else
 		{
 			glBegin(GL_TRIANGLE_STRIP);
 		}
-		do
-		{
-			lerpfrac = VectorL2Compare(verts1->v, verts2->v, distance) ? ent->framelerp : 1;
-			VectorInterpolate(verts1->v, lerpfrac, verts2->v, interpolated_verts);
-			glVertex3fv(interpolated_verts);
 
+		do {
 			order += 2;
-			verts1++;
-			verts2++;
+
+			lerpfrac = VectorL2Compare(verts1->v, verts2->v, distance) ? blend : 1;
+
+			if (lerping)
+			{
+				VectorInterpolate(verts1->v, lerpfrac, verts2->v, interpolated_verts);
+				glVertex3fv(interpolated_verts);
+
+				verts1++;
+				verts2++;
+			}
+			else
+			{
+				glVertex3f (verts1->v[0], verts1->v[1], verts1->v[2]);
+				verts1++;
+			}
+
 		} while (--count);
 
 		glEnd();
@@ -1157,76 +1216,32 @@ void R_DrawAliasOutlineFrame(int frame, aliashdr_t *paliashdr, entity_t *ent, in
 R_DrawAliasFrame
 =============
 */
-void R_DrawAliasFrame (int frame, aliashdr_t *paliashdr, entity_t *ent, int distance)
+void R_DrawAliasFrame (aliashdr_t *paliashdr, lerpdata_t lerpdata, entity_t *ent, int distance)
 {
-	int			i, *order, count, posenum, numposes;
+	int			i, *order, count;
 	float		l, lerpfrac;
 	vec3_t		lightvec, interpolated_verts;
 	trivertx_t	*verts1, *verts2;
+	float		blend;
+	qboolean	lerping;
 
-	if ((frame >= paliashdr->numframes) || (frame < 0))
+	if (lerpdata.pose1 != lerpdata.pose2)
 	{
-		Con_DPrintf ("R_DrawAliasFrame: no such frame %d\n", frame);
-		frame = 0;
+		lerping = true;
+		verts1  = (trivertx_t *)((byte *)paliashdr + paliashdr->posedata);
+		verts2  = verts1;
+		verts1 += lerpdata.pose1 * paliashdr->poseverts;
+		verts2 += lerpdata.pose2 * paliashdr->poseverts;
+		blend = lerpdata.blend;
 	}
-
-	posenum = paliashdr->frames[frame].firstpose;
-	numposes = paliashdr->frames[frame].numposes;
-
-	if (numposes > 1)
+	else // poses the same means either 1. the entity has paused its animation, or 2. r_lerpmodels is disabled
 	{
-		ent->frame_interval = paliashdr->frames[frame].interval;
-		posenum += (int)(cl.time / ent->frame_interval) % numposes;
+		lerping = false;
+		verts1  = (trivertx_t *)((byte *)paliashdr + paliashdr->posedata);
+		verts2  = verts1; // avoid bogus compiler warning
+		verts1 += lerpdata.pose1 * paliashdr->poseverts;
+		blend = 0; // avoid bogus compiler warning
 	}
-	else
-	{
-		ent->frame_interval = 0.1;
-	}
-
-	if (ent->lerpflags & LERP_RESETANIM) //kill any lerp in progress
-	{
-		ent->frame_start_time = 0;
-		ent->pose1 = posenum;
-		ent->pose2 = posenum;
-		ent->lerpflags -= LERP_RESETANIM;
-	}
-	else if (ent->pose2 != posenum) // pose changed, start new lerp
-	{
-		if (ent->lerpflags & LERP_RESETANIM2) //defer lerping one more time
-		{
-			ent->frame_start_time = 0;
-			ent->pose1 = posenum;
-			ent->pose2 = posenum;
-			ent->lerpflags -= LERP_RESETANIM2;
-		}
-		else
-		{
-			ent->frame_start_time = cl.time;
-			ent->pose1 = ent->pose2;
-			ent->pose2 = posenum;
-		}
-	}
-
-	//set up values
-	if (gl_interpolate_anims.value)
-	{
-		if (ent->lerpflags & LERP_FINISH && numposes == 1)
-			ent->framelerp = bound(0, (cl.time - ent->frame_start_time) / (ent->frame_finish_time - ent->frame_start_time), 1);
-		else
-			ent->framelerp = bound(0, (cl.time - ent->frame_start_time) / ent->frame_interval, 1);
-	}
-	else
-	{
-		ent->framelerp = 1;
-		ent->pose1 = posenum;
-		ent->pose2 = posenum;
-	}
-
-	verts1 = (trivertx_t *)((byte *)paliashdr + paliashdr->posedata);
-	verts2 = verts1;
-
-	verts1 += ent->pose1 * paliashdr->poseverts;
-	verts2 += ent->pose2 * paliashdr->poseverts;
 
 	order = (int *)((byte *)paliashdr + paliashdr->commands);
 
@@ -1260,7 +1275,7 @@ void R_DrawAliasFrame (int frame, aliashdr_t *paliashdr, entity_t *ent, int dist
 
 			order += 2;
 
-			lerpfrac = VectorL2Compare(verts1->v, verts2->v, distance) ? ent->framelerp : 1;
+			lerpfrac = VectorL2Compare(verts1->v, verts2->v, distance) ? blend : 1;
 
 			if (shading)
 			{
@@ -1283,11 +1298,19 @@ void R_DrawAliasFrame (int frame, aliashdr_t *paliashdr, entity_t *ent, int dist
 				glColor4f(lightvec[0], lightvec[1], lightvec[2], ent->transparency);
 			}
 
-			VectorInterpolate (verts1->v, lerpfrac, verts2->v, interpolated_verts);
-			glVertex3fv (interpolated_verts);
+			if (lerping)
+			{
+				VectorInterpolate(verts1->v, lerpfrac, verts2->v, interpolated_verts);
+				glVertex3fv(interpolated_verts);
 
-			verts1++;
-			verts2++;
+				verts1++;
+				verts2++;
+			}
+			else
+			{
+				glVertex3f (verts1->v[0], verts1->v[1], verts1->v[2]);
+				verts1++;
+			}
 		} while (--count);
 
 		glEnd ();
@@ -1302,12 +1325,13 @@ void R_DrawAliasFrame (int frame, aliashdr_t *paliashdr, entity_t *ent, int dist
 R_DrawAliasShadow
 =============
 */
-void R_DrawAliasShadow (aliashdr_t *paliashdr, entity_t *ent, int distance, trace_t downtrace)
+void R_DrawAliasShadow (aliashdr_t *paliashdr, lerpdata_t lerpdata, entity_t *ent, int distance, trace_t downtrace)
 {
 	int			*order, count;
 	float		lheight, lerpfrac, s1, c1;
 	vec3_t		point1, point2, interpolated;
 	trivertx_t	*verts1, *verts2;
+	float		blend;
 
 	lheight = ent->origin[2] - lightspot[2];
 
@@ -1316,9 +1340,9 @@ void R_DrawAliasShadow (aliashdr_t *paliashdr, entity_t *ent, int distance, trac
 
 	verts1 = (trivertx_t *)((byte *)paliashdr + paliashdr->posedata);
 	verts2 = verts1;
-
-	verts1 += ent->pose1 * paliashdr->poseverts;
-	verts2 += ent->pose2 * paliashdr->poseverts;
+	verts1 += lerpdata.pose1 * paliashdr->poseverts;
+	verts2 += lerpdata.pose2 * paliashdr->poseverts;
+	blend = lerpdata.blend;
 
 	order = (int *)((byte *)paliashdr + paliashdr->commands);
 
@@ -1338,7 +1362,7 @@ void R_DrawAliasShadow (aliashdr_t *paliashdr, entity_t *ent, int distance, trac
 		do {
 			order += 2;
 
-			lerpfrac = VectorL2Compare(verts1->v, verts2->v, distance) ? ent->framelerp : 1;
+			lerpfrac = VectorL2Compare(verts1->v, verts2->v, distance) ? blend : 1;
 
 			point1[0] = verts1->v[0] * paliashdr->scale[0] + paliashdr->scale_origin[0];
 			point1[1] = verts1->v[1] * paliashdr->scale[1] + paliashdr->scale_origin[1];
@@ -1372,6 +1396,139 @@ void R_DrawAliasShadow (aliashdr_t *paliashdr, entity_t *ent, int distance, trac
 
 		glEnd ();
 	}       
+}
+
+/*
+=================
+R_SetupAliasFrame -- johnfitz -- rewritten to support lerping
+=================
+*/
+void R_SetupAliasFrame (aliashdr_t *paliashdr, int frame, lerpdata_t *lerpdata)
+{
+	entity_t		*e = currententity;
+	int				posenum, numposes;
+
+	if ((frame >= paliashdr->numframes) || (frame < 0))
+	{
+		Con_DPrintf ("R_AliasSetupFrame: no such frame %d for '%s'\n", frame, e->model->name);
+		frame = 0;
+	}
+
+	posenum = paliashdr->frames[frame].firstpose;
+	numposes = paliashdr->frames[frame].numposes;
+
+	if (numposes > 1)
+	{
+		e->lerptime = paliashdr->frames[frame].interval;
+		posenum += (int)(cl.time / e->lerptime) % numposes;
+	}
+	else
+		e->lerptime = 0.1;
+
+	if (e->lerpflags & LERP_RESETANIM) //kill any lerp in progress
+	{
+		e->lerpstart = 0;
+		e->previouspose = posenum;
+		e->currentpose = posenum;
+		e->lerpflags -= LERP_RESETANIM;
+	}
+	else if (e->currentpose != posenum) // pose changed, start new lerp
+	{
+		if (e->lerpflags & LERP_RESETANIM2) //defer lerping one more time
+		{
+			e->lerpstart = 0;
+			e->previouspose = posenum;
+			e->currentpose = posenum;
+			e->lerpflags -= LERP_RESETANIM2;
+		}
+		else
+		{
+			e->lerpstart = cl.time;
+			e->previouspose = e->currentpose;
+			e->currentpose = posenum;
+		}
+	}
+
+	//set up values
+	if (gl_interpolate_anims.value/* && !(e->model->flags & MOD_NOLERP && gl_interpolate_anims.value != 2)*/)
+	{
+		if (e->lerpflags & LERP_FINISH && numposes == 1)
+			lerpdata->blend = bound(0.0f, (float)(cl.time - e->lerpstart) / (e->lerpfinish - e->lerpstart), 1.0f);
+		else
+			lerpdata->blend = bound(0.0f, (float)(cl.time - e->lerpstart) / e->lerptime, 1.0f);
+		if (lerpdata->blend == 1.0f)
+			e->previouspose = e->currentpose;
+		lerpdata->pose1 = e->previouspose;
+		lerpdata->pose2 = e->currentpose;
+	}
+	else //don't lerp
+	{
+		lerpdata->blend = 1;
+		lerpdata->pose1 = posenum;
+		lerpdata->pose2 = posenum;
+	}
+}
+
+/*
+=================
+R_SetupEntityTransform -- johnfitz -- set up transform part of lerpdata
+=================
+*/
+void R_SetupEntityTransform (entity_t *e, lerpdata_t *lerpdata)
+{
+	float blend;
+	vec3_t d;
+	int i;
+
+	// if LERP_RESETMOVE, kill any lerps in progress
+	if (e->lerpflags & LERP_RESETMOVE)
+	{
+		e->movelerpstart = 0;
+		VectorCopy (e->origin, e->previousorigin);
+		VectorCopy (e->origin, e->currentorigin);
+		VectorCopy (e->angles, e->previousangles);
+		VectorCopy (e->angles, e->currentangles);
+		e->lerpflags -= LERP_RESETMOVE;
+	}
+	else if (!VectorCompare (e->origin, e->currentorigin) || !VectorCompare (e->angles, e->currentangles)) // origin/angles changed, start new lerp
+	{
+		e->movelerpstart = cl.time;
+		VectorCopy (e->currentorigin, e->previousorigin);
+		VectorCopy (e->origin,  e->currentorigin);
+		VectorCopy (e->currentangles, e->previousangles);
+		VectorCopy (e->angles,  e->currentangles);
+	}
+
+	//set up values
+	if (gl_interpolate_moves.value && e != &cl.viewent && e->lerpflags & LERP_MOVESTEP)
+	{
+		if (e->lerpflags & LERP_FINISH)
+			blend = bound(0.0f, (float)(cl.time - e->movelerpstart) / (e->lerpfinish - e->movelerpstart), 1.0f);
+		else
+			blend = bound(0.0f, (float)(cl.time - e->movelerpstart) / 0.1f, 1.0f);
+
+		//translation
+		VectorSubtract (e->currentorigin, e->previousorigin, d);
+		lerpdata->origin[0] = e->previousorigin[0] + d[0] * blend;
+		lerpdata->origin[1] = e->previousorigin[1] + d[1] * blend;
+		lerpdata->origin[2] = e->previousorigin[2] + d[2] * blend;
+
+		//rotation
+		VectorSubtract (e->currentangles, e->previousangles, d);
+		for (i = 0; i < 3; i++)
+		{
+			if (d[i] > 180)  d[i] -= 360;
+			if (d[i] < -180) d[i] += 360;
+		}
+		lerpdata->angles[0] = e->previousangles[0] + d[0] * blend;
+		lerpdata->angles[1] = e->previousangles[1] + d[1] * blend;
+		lerpdata->angles[2] = e->previousangles[2] + d[2] * blend;
+	}
+	else //don't lerp
+	{
+		VectorCopy (e->origin, lerpdata->origin);
+		VectorCopy (e->angles, lerpdata->angles);
+	}
 }
 
 /*
@@ -1596,6 +1753,80 @@ void R_SetupInterpolateDistance (entity_t *ent, aliashdr_t *paliashdr, int *dist
 	}
 }
 
+static void R_DrawBbox(vec3_t origin, vec3_t mins, vec3_t maxs)
+{
+	int i, j, k;
+	int d2, d3;
+	vec3_t vert1, vert2;
+	vec3_t wmins, wmaxs;
+
+	VectorAdd(origin, mins, wmins);
+	VectorAdd(origin, maxs, wmaxs);
+
+	glColor3f(1.0f, 1.0f, 1.0f);
+
+	glCullFace(GL_FRONT);
+	glPolygonMode(GL_BACK, GL_LINE);
+	glLineWidth(1.0);
+	glEnable(GL_LINE_SMOOTH);
+	glDisable(GL_TEXTURE_2D);
+
+	glBegin(GL_LINES);
+
+	for (i = 0; i < 3; i++)
+	{
+		vert1[i] = wmins[i];
+		vert2[i] = wmaxs[i];
+
+		d2 = (i + 1) % 3;
+		d3 = (i + 2) % 3;
+
+		vert1[d2] = wmins[d2];
+		vert2[d2] = wmins[d2];
+		for (j = 0; j < 2; j++)
+		{
+			vert1[d3] = wmins[d3];
+			vert2[d3] = wmins[d3];
+			for (k = 0; k < 2; k++)
+			{
+				glVertex3fv(vert1);
+				glVertex3fv(vert2);
+				vert1[d3] = wmaxs[d3];
+				vert2[d3] = wmaxs[d3];
+			}
+			vert1[d2] = wmaxs[d2];
+			vert2[d2] = wmaxs[d2];
+		}
+	}
+
+	glEnd();
+
+	glDisable(GL_LINE_SMOOTH);
+	glEnable(GL_TEXTURE_2D);
+	glPolygonMode(GL_BACK, GL_FILL);
+	glCullFace(GL_BACK);
+}
+
+void R_DrawEntBbox(entity_t *ent)
+{
+	frame_range_t *range;
+	id1_bbox_t *bbox_info;
+
+	for (bbox_info = id1_bboxes; bbox_info->mi != NUM_MODELINDEX; bbox_info++)
+		if (cl_modelindex[bbox_info->mi] == ent->modelindex)
+			break;
+
+	if (bbox_info->mi != NUM_MODELINDEX)
+	{
+		for (range = bbox_info->not_solid_frames; range->frame_max != 0; range++)
+			if (range->frame_min <= ent->frame && ent->frame < range->frame_max)
+				break;
+
+		if (range->frame_max == 0)
+			R_DrawBbox(ent->origin, bbox_info->mins, bbox_info->maxs);
+	}
+}
+
 //johnfitz -- values for shadow matrix
 #define SHADOW_SKEW_X -0.7 //skew along x axis. -0.7 to mimic glquake shadows
 #define SHADOW_SKEW_Y 0 //skew along y axis. 0 to mimic glquake shadows
@@ -1614,10 +1845,22 @@ void R_DrawAliasModel (entity_t *ent)
 	vec3_t		mins;
 	aliashdr_t	*paliashdr;
 	model_t		*clmodel = ent->model;
+	lerpdata_t	lerpdata;
 	qboolean	islumaskin, alphatest = !!(ent->model->flags & MF_HOLEY);
 	float		scalefactor = 1.0f;
 
 	VectorAdd (ent->origin, clmodel->mins, mins);	//joe: used only for shadows now
+
+	// If cl_bbox is enabled apply dead body filter here.
+	if (cl_deadbodyfilter.value &&
+			CL_ShowBBoxes() &&
+			Model_isDead(ent->modelindex, ent->frame))
+		return;
+
+	// locate the proper data
+	paliashdr = (aliashdr_t *)Mod_Extradata (clmodel);
+	R_SetupAliasFrame (paliashdr, ent->frame, &lerpdata);
+	R_SetupEntityTransform (ent, &lerpdata);
 
 	if (R_CullModelForEntity(ent))
 		return;
@@ -1631,9 +1874,6 @@ void R_DrawAliasModel (entity_t *ent)
 	// get lighting information
 	R_SetupLighting (ent);
 
-	// locate the proper data
-	paliashdr = (aliashdr_t *)Mod_Extradata (clmodel);
-
 	c_alias_polys += paliashdr->numtris;
 
 	R_SetupInterpolateDistance (ent, paliashdr, &distance);
@@ -1641,16 +1881,7 @@ void R_DrawAliasModel (entity_t *ent)
 	// draw all the triangles
 	glPushMatrix ();
 
-	if (ent == &cl.viewent || clmodel->modhint == MOD_FLAME)
-		R_RotateForEntity (ent);
-	else
-		R_RotateForEntityWithLerp (ent, false);
-
-	scalefactor = ENTSCALE_DECODE(ent->scale);
-	if (scalefactor != 1.0f)
-	{
-		glScalef(scalefactor, scalefactor, scalefactor);
-	}
+	R_RotateForEntity (lerpdata.origin, lerpdata.angles, ent->scale);
 
 	if (clmodel->modhint == MOD_EYES && gl_doubleeyes.value)
 	{
@@ -1660,7 +1891,7 @@ void R_DrawAliasModel (entity_t *ent)
 	}
 	else if (ent == &cl.viewent)
 	{
-		float	scale = 1.0f, fovscale = 1.0f;
+		float	fovscale = 1.0f;
 		int		hand_offset = cl_hand.value == 1 ? -3 : cl_hand.value == 2 ? 3 : 0;
 		extern cvar_t scr_fov, cl_gun_fovscale;
 
@@ -1671,9 +1902,7 @@ void R_DrawAliasModel (entity_t *ent)
 		}
 
 		glTranslatef (paliashdr->scale_origin[0], (paliashdr->scale_origin[1] * fovscale) + hand_offset, paliashdr->scale_origin[2] * fovscale);
-
-		scale = (scr_fov.value > 90) ? 1 - ((scr_fov.value - 90) / 250) : 1;
-		glScalef (paliashdr->scale[0] * scale, paliashdr->scale[1] * fovscale, paliashdr->scale[2] * fovscale);
+		glScalef (paliashdr->scale[0], paliashdr->scale[1] * fovscale, paliashdr->scale[2] * fovscale);
 	}
 	else
 	{
@@ -1752,7 +1981,7 @@ void R_DrawAliasModel (entity_t *ent)
 
 	if (r_alias_program != 0)
 	{
-		R_DrawAliasFrame_GLSL(ent->frame, paliashdr, ent, distance, texture, fb_texture, islumaskin);
+		R_DrawAliasFrame_GLSL(paliashdr, lerpdata, ent, distance, texture, fb_texture, islumaskin);
 	}
 	else if (fb_texture && gl_mtexable)
 	{
@@ -1775,7 +2004,7 @@ void R_DrawAliasModel (entity_t *ent)
 			GL_Bind (fb_texture);
 		}
 
-		R_DrawAliasFrame (ent->frame, paliashdr, ent, distance);
+		R_DrawAliasFrame (paliashdr, lerpdata, ent, distance);
 
 		if (islumaskin && !gl_add_ext)
 		{
@@ -1787,7 +2016,7 @@ void R_DrawAliasModel (entity_t *ent)
 			glBlendFunc (GL_ONE, GL_ONE);
 			Fog_StartAdditive();
 
-			R_DrawAliasFrame (ent->frame, paliashdr, ent, distance);
+			R_DrawAliasFrame (paliashdr, lerpdata, ent, distance);
 
 			Fog_StopAdditive();
 			glDisable (GL_BLEND);
@@ -1803,7 +2032,7 @@ void R_DrawAliasModel (entity_t *ent)
 		glTexEnvf (GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
 		GL_Bind (texture);
 
-		R_DrawAliasFrame (ent->frame, paliashdr, ent, distance);
+		R_DrawAliasFrame (paliashdr, lerpdata, ent, distance);
 
 		if (fb_texture)
 		{
@@ -1822,7 +2051,7 @@ void R_DrawAliasModel (entity_t *ent)
 			}
 			Fog_StartAdditive();
 
-			R_DrawAliasFrame (ent->frame, paliashdr, ent, distance);
+			R_DrawAliasFrame (paliashdr, lerpdata, ent, distance);
 
 			Fog_StopAdditive();
 			if (islumaskin)
@@ -1844,7 +2073,7 @@ void R_DrawAliasModel (entity_t *ent)
 		
 		col = StringToRGB(r_outline_color.string);
 		glColor3ubv(col);
-		R_DrawAliasOutlineFrame(ent->frame, paliashdr, ent, distance);
+		R_DrawAliasOutlineFrame(paliashdr, lerpdata, ent, distance);
 		glColor4f(1, 1, 1, 1);
 	}
 
@@ -1866,19 +2095,20 @@ void R_DrawAliasModel (entity_t *ent)
 									0,				1,				0,				0,
 									SHADOW_SKEW_X,	SHADOW_SKEW_Y,	SHADOW_VSCALE,	0,
 									0,				0,				SHADOW_HEIGHT,	1};
-		float	lheight, lerpfrac;
+		float	lheight;
 
 		lheight = ent->origin[2] - lightspot[2];
 		farclip = max((int)r_farclip.value, 4096);
-		lerpfrac = R_CalculateLerpfracForEntity(ent);
 
 		glPushMatrix ();
 
-		R_DoEntityTranslate (ent, lerpfrac);
+		glTranslatef (lerpdata.origin[0],  lerpdata.origin[1],  lerpdata.origin[2]);
 		glTranslatef (0, 0, -lheight);
 		glMultMatrixf (shadowmatrix);
 		glTranslatef (0, 0, lheight);
-		R_DoEntityRotate (ent, lerpfrac, true);
+		glRotatef (lerpdata.angles[1],  0, 0, 1);
+		glRotatef (-lerpdata.angles[0],  0, 1, 0);
+		glRotatef (lerpdata.angles[2],  1, 0, 0);
 		glTranslatef (paliashdr->scale_origin[0], paliashdr->scale_origin[1], paliashdr->scale_origin[2]);
 		glScalef (paliashdr->scale[0], paliashdr->scale[1], paliashdr->scale[2]);
 
@@ -1899,7 +2129,7 @@ void R_DrawAliasModel (entity_t *ent)
 		}
 
 		shading = false;
-		R_DrawAliasFrame (ent->frame, paliashdr, ent, distance);
+		R_DrawAliasFrame (paliashdr, lerpdata, ent, distance);
 
 		glDepthMask (GL_TRUE);
 		glEnable (GL_TEXTURE_2D);
@@ -2230,40 +2460,40 @@ void R_DrawQ3Frame (int frame, md3header_t *pmd3hdr, md3surface_t *pmd3surf, ent
 		frame = 0;
 	}
 
-	if (ent->pose1 >= pmd3hdr->numframes)
-		ent->pose1 = 0;
+	if (ent->previouspose >= pmd3hdr->numframes)
+		ent->previouspose = 0;
 
 	posenum = frame;
 	numposes = pmd3hdr->numframes;
 
 	if (!strcmp(clmodel->name, cl_modelnames[mi_q3legs]))
-		ent->frame_interval = anims[legsanim].interval;
+		ent->lerptime = anims[legsanim].interval;
 	else if (!strcmp(clmodel->name, cl_modelnames[mi_q3torso]))
-		ent->frame_interval = anims[bodyanim].interval;
+		ent->lerptime = anims[bodyanim].interval;
 	else
-		ent->frame_interval = 0.1;
+		ent->lerptime = 0.1;
 
 	if (ent->lerpflags & LERP_RESETANIM) //kill any lerp in progress
 	{
-		ent->frame_start_time = 0;
-		ent->pose1 = posenum;
-		ent->pose2 = posenum;
+		ent->lerpstart = 0;
+		ent->previouspose = posenum;
+		ent->currentpose = posenum;
 		ent->lerpflags -= LERP_RESETANIM;
 	}
-	else if (ent->pose2 != posenum) // pose changed, start new lerp
+	else if (ent->currentpose != posenum) // pose changed, start new lerp
 	{
 		if (ent->lerpflags & LERP_RESETANIM2) //defer lerping one more time
 		{
-			ent->frame_start_time = 0;
-			ent->pose1 = posenum;
-			ent->pose2 = posenum;
+			ent->lerpstart = 0;
+			ent->previouspose = posenum;
+			ent->currentpose = posenum;
 			ent->lerpflags -= LERP_RESETANIM2;
 		}
 		else
 		{
-			ent->frame_start_time = cl.time;
-			ent->pose1 = ent->pose2;
-			ent->pose2 = posenum;
+			ent->lerpstart = cl.time;
+			ent->previouspose = ent->currentpose;
+			ent->currentpose = posenum;
 		}
 	}
 
@@ -2271,23 +2501,23 @@ void R_DrawQ3Frame (int frame, md3header_t *pmd3hdr, md3surface_t *pmd3surf, ent
 	if (gl_interpolate_anims.value)
 	{
 		if (ent->lerpflags & LERP_FINISH && numposes == 1)
-			ent->framelerp = bound(0, (cl.time - ent->frame_start_time) / (ent->frame_finish_time - ent->frame_start_time), 1);
+			ent->framelerp = bound(0, (cl.time - ent->lerpstart) / (ent->lerpfinish - ent->lerpstart), 1);
 		else
-			ent->framelerp = bound(0, (cl.time - ent->frame_start_time) / ent->frame_interval, 1);
+			ent->framelerp = bound(0, (cl.time - ent->lerpstart) / ent->lerptime, 1);
 	}
 	else
 	{
 		ent->framelerp = 1;
-		ent->pose1 = posenum;
-		ent->pose2 = posenum;
+		ent->previouspose = posenum;
+		ent->currentpose = posenum;
 	}
 
 	verts = (md3vert_mem_t *)((byte *)pmd3hdr + pmd3surf->ofsverts);
 	tc = (md3tc_t *)((byte *)pmd3surf + pmd3surf->ofstc);
 	tris = (unsigned int *)((byte *)pmd3surf + pmd3surf->ofstris);
 	numtris = pmd3surf->numtris * 3;
-	pose1 = ent->pose1 * pmd3surf->numverts;
-	pose2 = ent->pose2 * pmd3surf->numverts;
+	pose1 = ent->previouspose * pmd3surf->numverts;
+	pose2 = ent->currentpose * pmd3surf->numverts;
 
 	if (surface_transparent)
 	{
@@ -2419,8 +2649,8 @@ void R_DrawQ3Shadow (entity_t *ent, int distance)
 		verts = (md3vert_mem_t *)((byte *)pmd3hdr + pmd3surf->ofsverts);
 		tris = (unsigned int *)((byte *)pmd3surf + pmd3surf->ofstris);
 		numtris = pmd3surf->numtris * 3;
-		pose1 = ent->pose1 * pmd3surf->numverts;
-		pose2 = ent->pose2 * pmd3surf->numverts;
+		pose1 = ent->previouspose * pmd3surf->numverts;
+		pose2 = ent->currentpose * pmd3surf->numverts;
 
 		glBegin (GL_TRIANGLES);
 		for (j = 0 ; j < numtris ; j++)
@@ -2447,7 +2677,7 @@ void R_DrawQ3Shadow (entity_t *ent, int distance)
 		return;
 
 	tag = (md3tag_t *)((byte *)pmd3hdr + pmd3hdr->ofstags);
-	tag += ent->pose2 * pmd3hdr->numtags;
+	tag += ent->currentpose * pmd3hdr->numtags;
 	for (i = 0 ; i < pmd3hdr->numtags ; i++, tag++)
 	{
 		if (ent->modelindex == cl_modelindex[mi_q3legs] && !strcmp(tag->name, "tag_torso"))
@@ -2496,7 +2726,7 @@ void R_DrawQ3Shadow (entity_t *ent, int distance)
 		if (newent->model)
 		{
 			glPushMatrix();
-			R_RotateForTagEntity(tagent, tag, m, ent->frame_interval);
+			R_RotateForTagEntity(tagent, tag, m, ent->lerptime);
 			glMultMatrixf(m);
 			R_DrawQ3Shadow(newent, distance);
 			glPopMatrix();
@@ -2695,7 +2925,7 @@ void R_SetupQ3Frame (entity_t *ent)
 		if (newent->model)
 		{
 			glPushMatrix();
-			R_RotateForTagEntity(tagent, tag, m, ent->frame_interval);
+			R_RotateForTagEntity(tagent, tag, m, ent->lerptime);
 			glMultMatrixf(m);
 
 			// apply pitch rotation from the torso model
@@ -2753,10 +2983,7 @@ void R_DrawQ3Model (entity_t *ent)
 
 	glPushMatrix ();
 
-	if (ent == &cl.viewent)
-		R_RotateForEntity (ent);
-	else
-		R_RotateForEntityWithLerp (ent, false);
+	R_RotateForEntityWithLerp (ent, false);
 
 	scalefactor = ENTSCALE_DECODE(ent->scale);
 	if (scalefactor != 1.0f)
@@ -2766,14 +2993,18 @@ void R_DrawQ3Model (entity_t *ent)
 
 	if (ent == &cl.viewent)
 	{
-		float scale = 1;
-		int hand_offset = cl_hand.value == 1 ? -3 : cl_hand.value == 2 ? 3 : 0;
-		extern cvar_t scr_fov;
+		float	fovscale = 1.0f;
+		int		hand_offset = cl_hand.value == 1 ? -3 : cl_hand.value == 2 ? 3 : 0;
+		extern cvar_t scr_fov, cl_gun_fovscale;
 
-		glTranslatef (md3_scale_origin[0], md3_scale_origin[1] + hand_offset, md3_scale_origin[2]);
+		if (scr_fov.value > 90.f && cl_gun_fovscale.value)
+		{
+			fovscale = tan(scr_fov.value * (0.5f * M_PI / 180.f));
+			fovscale = 1.f + (fovscale - 1.f) * cl_gun_fovscale.value;
+		}
 
-		scale = (scr_fov.value > 90) ? 1 - ((scr_fov.value - 90) / 250) : 1;
-		glScalef (scale, 1, 1);
+		glTranslatef (md3_scale_origin[0], (md3_scale_origin[1] * fovscale) + hand_offset, md3_scale_origin[2] * fovscale);
+		glScalef (1.0f, fovscale, fovscale);
 	}
 	else
 	{
@@ -2999,6 +3230,9 @@ void R_DrawEntitiesOnList ()
 
 		if (qmb_initialized && SetFlameModelState() == -1)
 			continue;
+
+		if (CL_ShowBBoxes())
+			R_DrawEntBbox(currententity);
 
 		if (ISTRANSPARENT(currententity) && cl_numtransvisedicts < MAX_VISEDICTS)
 		{
@@ -3509,9 +3743,10 @@ void R_Init (void)
 	Cvar_Register (&r_skyfog);
 	Cvar_Register (&r_skyfog_default);
 	Cvar_Register (&r_scale);
-	Cvar_Register(&r_waterquality);
-	Cvar_Register(&r_oldwater);
-	Cvar_Register(&r_waterwarp);
+	Cvar_Register (&r_ambient);
+	Cvar_Register (&r_waterquality);
+	Cvar_Register (&r_oldwater);
+	Cvar_Register (&r_waterwarp);
 
 	Cvar_Register (&gl_finish);
 	Cvar_Register (&gl_clear);
