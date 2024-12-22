@@ -61,10 +61,12 @@ int DoWeaponInterpolation (void);
 
 int				cl_numtransvisedicts;
 entity_t		*cl_transvisedicts[MAX_VISEDICTS];
-int				cl_numplayers;
-entity_t		*cl_players[MAX_SCOREBOARD];
 
-qboolean draw_player_outlines = false;
+#define MAX_WALLHACKED_ENTITIES	1024	//joe: the total number of visible players + monsters, should be enough
+int				cl_num_wallhacked_entities;
+entity_t		*cl_wallhacked_entities[MAX_WALLHACKED_ENTITIES];
+
+qboolean draw_wallhacked_outlines = false;
 
 // view origin
 vec3_t	vup;
@@ -99,6 +101,7 @@ cvar_t	r_novis = {"r_novis", "0" };
 cvar_t	r_outline = { "r_outline", "0" };
 cvar_t	r_outline_surf = { "r_outline_surf", "0" };
 cvar_t	r_outline_players = { "r_outline_players", "0" };
+cvar_t	r_outline_monsters = { "r_outline_monsters", "0" };
 cvar_t	r_outline_color = {"r_outline_color", "0 0 0" };
 cvar_t	r_fullbrightskins = {"r_fullbrightskins", "0"};
 cvar_t	r_fastsky = {"r_fastsky", "0"};
@@ -171,6 +174,8 @@ cvar_t	gl_decal_explosions = {"gl_decal_explosions", "0"};
 extern cvar_t r_waterquality;
 extern cvar_t r_oldwater;
 extern cvar_t r_waterwarp;
+
+qboolean r_outline_monsters_cheatsafe, cl_truelightning_cheatsafe;
 
 float	pitch_rot;
 #if 0
@@ -1124,16 +1129,20 @@ void R_DrawAliasOutlineFrame(aliashdr_t *paliashdr, lerpdata_t lerpdata, entity_
 	float		lerpfrac;
 	trivertx_t	*verts1, *verts2;
 	qboolean	lerpmdl = true;
-	float		line_width = draw_player_outlines ? bound(1, r_outline_players.value, 3) : bound(1, r_outline.value, 3);
 	float		blend;
 	qboolean	lerping;
+	float		line_width = draw_wallhacked_outlines ? 
+		(ent->model->modhint == MOD_PLAYER ? bound(1, r_outline_players.value, 3) : bound(1, r_outline_monsters.value, 3)) : 
+		bound(1, r_outline.value, 3);
 
-	// Don't draw outlines on transparent models, except when drawing wallhacked teammates
-	if (ent->transparency < 1.0f && !draw_player_outlines)
+	// Don't draw outlines on transparent models, except when drawing wallhacked entities
+	if (ent->transparency < 1.0f && !draw_wallhacked_outlines)
 		return;
 
-	// Don't draw outlines twice on player models, as they can overlap if different widths are used
-	if (ent->model->modhint == MOD_PLAYER && r_outline_players.value && r_outline.value && !draw_player_outlines)
+	// Don't draw outlines twice on wallhacked models, as they can overlap if different widths are used
+	if (r_outline.value && !draw_wallhacked_outlines &&
+		((ent->model->modhint == MOD_PLAYER && r_outline_players.value) ||
+		 (Mod_IsMonsterModel(ent->modelindex) && r_outline_monsters_cheatsafe)))
 		return;
 
 	// No outlines on certain models
@@ -1893,11 +1902,10 @@ void R_DrawAliasModel (entity_t *ent)
 	{
 		float	fovscale = 1.0f;
 		int		hand_offset = cl_hand.value == 1 ? -3 : cl_hand.value == 2 ? 3 : 0;
-		extern cvar_t scr_fov, cl_gun_fovscale;
 
-		if (scr_fov.value > 90.f && cl_gun_fovscale.value)
+		if (r_refdef.basefov > 90.f && cl_gun_fovscale.value)
 		{
-			fovscale = tan(scr_fov.value * (0.5f * M_PI / 180.f));
+			fovscale = tan(r_refdef.basefov * (0.5f * M_PI / 180.f));
 			fovscale = 1.f + (fovscale - 1.f) * cl_gun_fovscale.value;
 		}
 
@@ -1922,6 +1930,11 @@ void R_DrawAliasModel (entity_t *ent)
 	fb_texture = paliashdr->fb_texturenum[skinnum][anim];
 	islumaskin = paliashdr->islumaskin[skinnum][anim];
 
+	if (Mod_IsMonsterModel(ent->modelindex) && r_outline_monsters_cheatsafe && cl_num_wallhacked_entities < MAX_WALLHACKED_ENTITIES && !draw_wallhacked_outlines)
+	{
+		cl_wallhacked_entities[cl_num_wallhacked_entities++] = ent;
+	}
+
 	// we can't dynamically colormap textures, so they are cached
 	// seperately for the players. Heads are just uncolored.
 	if (ent->colormap != vid.colormap && !gl_nocolors.value)
@@ -1929,9 +1942,9 @@ void R_DrawAliasModel (entity_t *ent)
 		extern int player_32bit_skins[14];
 		extern qboolean player_32bit_skins_loaded;
 
-		if (clmodel->modhint == MOD_PLAYER && cl_numplayers < MAX_SCOREBOARD)
+		if (clmodel->modhint == MOD_PLAYER && r_outline_players.value && cl_num_wallhacked_entities < MAX_WALLHACKED_ENTITIES && !draw_wallhacked_outlines)
 		{
-			cl_players[cl_numplayers++] = ent;
+			cl_wallhacked_entities[cl_num_wallhacked_entities++] = ent;
 		}
 
 		if (ent == &ghost_entity)
@@ -2067,7 +2080,7 @@ void R_DrawAliasModel (entity_t *ent)
 		}
 	}
 	
-	if (r_outline.value || draw_player_outlines)
+	if (r_outline.value || draw_wallhacked_outlines)
 	{
 		byte *col;
 		
@@ -2086,7 +2099,7 @@ void R_DrawAliasModel (entity_t *ent)
 
 	glPopMatrix ();
 
-	if (r_shadows.value && !ent->noshadow && !draw_player_outlines)
+	if (r_shadows.value && !ent->noshadow && !draw_wallhacked_outlines)
 	{
 		int		farclip;
 		vec3_t	downmove;
@@ -2435,6 +2448,133 @@ void R_ReplaceQ3Frame (int frame)
 
 	oldbodyanim = bodyanim;
 	oldlegsanim = legsanim;
+}
+
+/*
+=================
+R_DrawQ3OutlineFrame
+=================
+*/
+void R_DrawQ3OutlineFrame (int frame, md3header_t *pmd3hdr, md3surface_t *pmd3surf, entity_t *ent, int distance)
+{
+	int			i, numtris, posenum, numposes, pose1, pose2;
+	float		lerpfrac;
+	vec3_t		interpolated_verts;
+	unsigned int *tris;
+	md3tc_t		*tc;
+	md3vert_mem_t *verts, *v1, *v2;
+	model_t		*clmodel = ent->model;
+	float		line_width = draw_wallhacked_outlines ? 
+		(ent->model->modhint == MOD_PLAYER ? bound(1, r_outline_players.value, 3) : bound(1, r_outline_monsters.value, 3)) : 
+		bound(1, r_outline.value, 3);
+
+	if ((frame >= pmd3hdr->numframes) || (frame < 0))
+	{
+		Con_DPrintf ("R_DrawQ3OutlineFrame: no such frame %d\n", frame);
+		frame = 0;
+	}
+
+	// Don't draw outlines on transparent models, except when drawing wallhacked teammates
+	if (ent->transparency < 1.0f && !draw_wallhacked_outlines)
+		return;
+
+	// Don't draw outlines twice on wallhacked models, as they can overlap if different widths are used
+	if (r_outline.value && !draw_wallhacked_outlines &&
+		((ent->model->modhint == MOD_PLAYER && r_outline_players.value) ||
+		 (Mod_IsMonsterModel(ent->modelindex) && r_outline_monsters_cheatsafe)))
+		return;
+
+	// No outlines on certain models
+	if (ent->model->modhint == MOD_EYES || ent->model->modhint == MOD_FLAME)
+		return;
+
+	glCullFace(GL_FRONT);
+	glPolygonMode(GL_BACK, GL_LINE);
+	glLineWidth(line_width);
+	glEnable(GL_LINE_SMOOTH);
+	GL_PolygonOffset(-0.7);
+	glDisable(GL_TEXTURE_2D);
+
+	if (ent->previouspose >= pmd3hdr->numframes)
+		ent->previouspose = 0;
+
+	posenum = frame;
+	numposes = pmd3hdr->numframes;
+
+	if (!strcmp(clmodel->name, cl_modelnames[mi_q3legs]))
+		ent->lerptime = anims[legsanim].interval;
+	else if (!strcmp(clmodel->name, cl_modelnames[mi_q3torso]))
+		ent->lerptime = anims[bodyanim].interval;
+	else
+		ent->lerptime = 0.1;
+
+	if (ent->lerpflags & LERP_RESETANIM) //kill any lerp in progress
+	{
+		ent->lerpstart = 0;
+		ent->previouspose = posenum;
+		ent->currentpose = posenum;
+		ent->lerpflags -= LERP_RESETANIM;
+	}
+	else if (ent->currentpose != posenum) // pose changed, start new lerp
+	{
+		if (ent->lerpflags & LERP_RESETANIM2) //defer lerping one more time
+		{
+			ent->lerpstart = 0;
+			ent->previouspose = posenum;
+			ent->currentpose = posenum;
+			ent->lerpflags -= LERP_RESETANIM2;
+		}
+		else
+		{
+			ent->lerpstart = cl.time;
+			ent->previouspose = ent->currentpose;
+			ent->currentpose = posenum;
+		}
+	}
+
+	//set up values
+	if (gl_interpolate_anims.value)
+	{
+		if (ent->lerpflags & LERP_FINISH && numposes == 1)
+			ent->framelerp = bound(0, (cl.time - ent->lerpstart) / (ent->lerpfinish - ent->lerpstart), 1);
+		else
+			ent->framelerp = bound(0, (cl.time - ent->lerpstart) / ent->lerptime, 1);
+	}
+	else
+	{
+		ent->framelerp = 1;
+		ent->previouspose = posenum;
+		ent->currentpose = posenum;
+	}
+
+	verts = (md3vert_mem_t *)((byte *)pmd3hdr + pmd3surf->ofsverts);
+	tc = (md3tc_t *)((byte *)pmd3surf + pmd3surf->ofstc);
+	tris = (unsigned int *)((byte *)pmd3surf + pmd3surf->ofstris);
+	numtris = pmd3surf->numtris * 3;
+	pose1 = ent->previouspose * pmd3surf->numverts;
+	pose2 = ent->currentpose * pmd3surf->numverts;
+
+	glBegin (GL_TRIANGLES);
+	for (i = 0 ; i < numtris ; i++)
+	{
+		v1 = verts + *tris + pose1;
+		v2 = verts + *tris + pose2;
+
+		lerpfrac = VectorL2Compare(v1->vec, v2->vec, distance) ? ent->framelerp : 1;
+
+		VectorInterpolate (v1->vec, lerpfrac, v2->vec, interpolated_verts);
+		glVertex3fv (interpolated_verts);
+
+		*tris++;
+	}
+	glEnd ();
+
+	glColor4f(1, 1, 1, 1);
+	GL_PolygonOffset(0);
+	glPolygonMode(GL_BACK, GL_FILL);
+	glDisable(GL_LINE_SMOOTH);
+	glCullFace(GL_BACK);
+	glEnable(GL_TEXTURE_2D);
 }
 
 qboolean	surface_transparent;
@@ -2846,6 +2986,16 @@ void R_SetupQ3Frame (entity_t *ent)
 				}
 			}
 
+			if (r_outline.value || draw_wallhacked_outlines)
+			{
+				byte *col;
+
+				col = StringToRGB(r_outline_color.string);
+				glColor3ubv(col);
+				R_DrawQ3OutlineFrame(frame, pmd3hdr, pmd3surf, ent, INTERP_MAXDIST);
+				glColor4f(1, 1, 1, 1);
+			}
+
 			pmd3surf = (md3surface_t *)((byte *)pmd3surf + pmd3surf->ofsend);
 		}
 	}
@@ -3023,6 +3173,15 @@ void R_DrawQ3Model (entity_t *ent)
 		}
 	}
 
+	//if (!strcmp(ent->model->name, "progs/end2.md3") && cl_num_wallhacked_entities < MAX_WALLHACKED_ENTITIES && !draw_wallhacked_outlines)
+	//{
+	//	cl_wallhacked_entities[cl_num_wallhacked_entities++] = ent;
+	//}
+	if (clmodel->modhint == MOD_PLAYER && r_outline_players.value && cl_num_wallhacked_entities < MAX_WALLHACKED_ENTITIES && !draw_wallhacked_outlines)
+	{
+		cl_wallhacked_entities[cl_num_wallhacked_entities++] = ent;
+	}
+
 	if (gl_smoothmodels.value)
 		glShadeModel (GL_SMOOTH);
 
@@ -3040,7 +3199,7 @@ void R_DrawQ3Model (entity_t *ent)
 
 	glPopMatrix ();
 
-	if (r_shadows.value && !ent->noshadow)
+	if (r_shadows.value && !ent->noshadow && !draw_wallhacked_outlines)
 	{
 		int		farclip;
 		vec3_t	downmove;
@@ -3220,8 +3379,8 @@ void R_DrawEntitiesOnList ()
 	if (!r_drawentities.value)
 		return;
 
-	cl_numplayers = 0;
 	cl_numtransvisedicts = 0;
+	cl_num_wallhacked_entities = 0;
 
 	// draw sprites seperately, because of alpha blending
 	for (i = 0 ; i < cl_numvisedicts ; i++)
@@ -3355,29 +3514,61 @@ void R_DrawViewModel (void)
 	glDepthRange (0, 1);
 }
 
-void R_DrawPlayerOutlines()
+/*
+=============
+R_DrawWallhackedOutlines
+
+This is planned to be the common wallhack drawing routine in the future.
+Currently only players (in coop) are drawn in such way. UPDATE 2024-12-16: Extended for monsters (while not recording)
+Added support for md3 models, that's why we're differentiating via model type.
+=============
+*/
+void R_DrawWallhackedOutlines()
 {
 	int			i;
 	float		playeralpha;
 
-	if (cl.gametype == GAME_DEATHMATCH || !r_drawentities.value || !r_outline_players.value)
+	if (cl.gametype == GAME_DEATHMATCH || !r_drawentities.value || (!r_outline_players.value && !r_outline_monsters_cheatsafe))
 		return;
 
-	draw_player_outlines = true;
+	draw_wallhacked_outlines = true;
 	glDepthRange (0, 0.3);
-	for (i = 0; i < cl_numplayers; i++)
+	
+	for (i = 0; i < cl_num_wallhacked_entities; i++)
 	{
-		currententity = cl_players[i];
+		currententity = cl_wallhacked_entities[i];
+
+		if (currententity->model->modhint == MOD_PLAYER && !r_outline_players.value)
+			continue;
+		else if (Mod_IsMonsterModel(currententity->modelindex) && !r_outline_monsters_cheatsafe)
+			continue;
 
 		playeralpha = currententity->transparency;
 		currententity->transparency = 0.000001f;
 
-		R_DrawAliasModel (currententity);
+		switch (currententity->model->type)
+		{
+		case mod_alias:
+			R_DrawAliasModel (currententity);
+			break;
+
+		case mod_md3:
+			R_DrawQ3Model (currententity);
+			break;
+
+		case mod_brush:
+			R_DrawBrushModel (currententity);
+			break;
+
+		default:
+			break;
+		}
 
 		currententity->transparency = playeralpha;
 	}
+	
 	glDepthRange (0, 1);
-	draw_player_outlines = false;
+	draw_wallhacked_outlines = false;
 }
 
 /*
@@ -3627,6 +3818,14 @@ void R_SetupFrame (void)
 	R_UpdateWarpTextures(); //johnfitz -- do this before R_Clear
 
 	R_Clear();
+
+	// cheat-protect some draw modes
+	r_outline_monsters_cheatsafe = cl_truelightning_cheatsafe = false;
+	if (!cls.demorecording)
+	{
+		if (r_outline_monsters.value) r_outline_monsters_cheatsafe = true;
+		if (cl_truelightning.value) cl_truelightning_cheatsafe = true;
+	}
 }
 
 void MYgluPerspective (GLdouble fovy, GLdouble aspect, GLdouble zNear, GLdouble zFar)
@@ -3732,6 +3931,7 @@ void R_Init (void)
 	Cvar_Register (&r_outline);
 	Cvar_Register (&r_outline_surf);
 	Cvar_Register (&r_outline_players);
+	Cvar_Register (&r_outline_monsters);
 	Cvar_Register (&r_outline_color);
 	Cvar_Register (&r_fullbrightskins);
 	Cvar_Register (&r_fastsky);
@@ -3860,7 +4060,7 @@ void R_RenderScene (void)
 
 	R_DrawParticles();
 
-	R_DrawPlayerOutlines();
+	R_DrawWallhackedOutlines();
 
 	Fog_DisableGFog(); //johnfitz
 
