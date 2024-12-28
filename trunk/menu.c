@@ -2930,7 +2930,7 @@ void M_Misc_Draw(void)
 	M_Print_GetPoint(16, 40, &lx, &ly, "    Power Bunnyhopping", misc_cursor == 1);
 	M_DrawCheckbox(220, 40, cl_forwardspeed.value == 200 && (in_speed.state & 1));
 
-	M_Print_GetPoint(16, 48, &lx, &ly, "           Demo player", misc_cursor == 2);
+	M_Print_GetPoint(16, 48, &lx, &ly, "        Demo player UI", misc_cursor == 2);
 	M_DrawCheckbox(220, 48, cl_demoui.value);
 
 	M_Print_GetPoint(16, 56, &lx, &ly, "   Demo playback speed", misc_cursor == 3);
@@ -3415,7 +3415,7 @@ void M_Hud_Draw(void)
 	M_Print_GetPoint(16, 184, &lx, &ly, "        Console height", hud_cursor == 19);
 	M_DrawSliderFloat(220, 184, scr_consize.value, scr_consize.value, &hud_slider_consize_window);
 
-	M_Print_GetPoint(16, 192, &lx, &ly, "         Console speed", hud_cursor == 21);
+	M_Print_GetPoint(16, 192, &lx, &ly, "         Console speed", hud_cursor == 20);
 	r = (float)FindSliderItemIndex(console_speed_values, CONSOLE_SPEED_ITEMS, &scr_conspeed) / (CONSOLE_SPEED_ITEMS - 1);
 	M_DrawSliderInt(220, 192, r, scr_conspeed.value, &hud_slider_conspeed_window);
 
@@ -3657,7 +3657,7 @@ void M_Hud_MouseSlider(int k, const mouse_state_t *ms)
 		switch (hud_cursor)
 		{
 		case 0:	// sbar scale
-			M_Mouse_Select_Column(&hud_slider_sbarscale_window, ms, 7, &slider_pos);
+			M_Mouse_Select_Column(&hud_slider_sbarscale_window, ms, 11, &slider_pos);
 			scr_sbarscale_amount.value = bound(1, (slider_pos * 0.5) + 1, scr_sbarscale_amount_max);
 			Cvar_SetValue(&scr_sbarscale_amount, scr_sbarscale_amount.value);
 			break;
@@ -5698,6 +5698,7 @@ qboolean M_Decals_Mouse_Event(const mouse_state_t *ms)
 int	weapons_cursor = 0;
 
 menu_window_t weapons_window;
+menu_window_t weapons_slider_gun_fovscale_window;
 
 void M_Menu_Weapons_f(void)
 {
@@ -5899,7 +5900,7 @@ void M_Weapons_Draw(void)
 	DrawViewmodelType(220, 32);
 
 	M_Print_GetPoint(16, 40, &lx, &ly, "      Weapon FOV scale", weapons_cursor == 1);
-	M_DrawSliderFloat(220, 40, cl_gun_fovscale.value, cl_gun_fovscale.value, &weapons_window);
+	M_DrawSliderFloat(220, 40, cl_gun_fovscale.value, cl_gun_fovscale.value, &weapons_slider_gun_fovscale_window);
 
 	M_Print_GetPoint(16, 48, &lx, &ly, "     Weapon handedness", weapons_cursor == 2);
 	DrawHandType(220, 48);
@@ -5910,8 +5911,8 @@ void M_Weapons_Draw(void)
 	M_Print_GetPoint(16, 64, &lx, &ly, "     Weapon fire light", weapons_cursor == 4);
 	M_DrawCheckbox(220, 64, cl_muzzleflash.value);
 
-	M_Print_GetPoint(16, 80, &lx, &ly, "   Enable view weapons", weapons_cursor == 6);
-	M_DrawCheckbox(220, 80, cl_viewweapons.value);
+	M_Print_GetPoint(16, 72, &lx, &ly, "   Enable view weapons", weapons_cursor == 5);
+	M_DrawCheckbox(220, 72, cl_viewweapons.value);
 
 	M_Print_GetPoint(16, 88, &lx, &ly, "        True lightning", weapons_cursor == 7);
 	M_DrawCheckbox(220, 88, cl_truelightning.value);
@@ -5922,8 +5923,8 @@ void M_Weapons_Draw(void)
 	M_Print_GetPoint(16, 104, &lx, &ly, "    Grenade trail type", weapons_cursor == 9);
 	DrawGrenadeTrailType(220, 104);
 
-	M_Print_GetPoint(-32, 120, &lx, &ly, "Show grenade model as rocket", weapons_cursor == 11);
-	M_DrawCheckbox(220, 120, cl_rocket2grenade.value);
+	M_Print_GetPoint(-32, 112, &lx, &ly, "Show grenade model as rocket", weapons_cursor == 10);
+	M_DrawCheckbox(220, 112, cl_rocket2grenade.value);
 
 	M_Print_GetPoint(16, 128, &lx, &ly, "          Rocket light", weapons_cursor == 12);
 	M_DrawCheckbox(220, 128, r_rocketlight.value);
@@ -5944,11 +5945,25 @@ void M_Weapons_Draw(void)
 	weapons_window.h = ly - weapons_window.y + 8;
 
 	// don't draw cursor if we're on a spacing line
-	if (weapons_cursor == 5 || weapons_cursor == 10)
+	if (weapons_cursor == 6 || weapons_cursor == 11)
 		return;
 
 	// cursor
 	M_DrawCharacter(200, 32 + weapons_cursor * 8, 12 + ((int)(realtime * 4) & 1));
+}
+
+void M_Weapons_KeyboardSlider(int dir)
+{
+	S_LocalSound("misc/menu3.wav");
+
+	switch (weapons_cursor)
+	{
+	case 1:
+		cl_gun_fovscale.value += dir * 0.1;
+		cl_gun_fovscale.value = bound(0, cl_gun_fovscale.value, 1);
+		Cvar_SetValue(&cl_gun_fovscale, cl_gun_fovscale.value);
+		break;
+	}
 }
 
 void M_Weapons_Key(int k)
@@ -5991,7 +6006,11 @@ void M_Weapons_Key(int k)
 		break;
 
 	case K_LEFTARROW:
+		M_Weapons_KeyboardSlider(-1);
+		break;
+
 	case K_RIGHTARROW:
+		M_Weapons_KeyboardSlider(1);
 		break;
 
 	case K_ENTER:
@@ -6006,73 +6025,73 @@ void M_Weapons_Key(int k)
 			Cvar_SetValue(&r_drawviewmodel, newvalue);
 			break;
 
-		case 1:
+		case 2:
 			newvalue = cl_hand.value + 1;
 			if (newvalue > 2)
 				newvalue = 0;
 			Cvar_SetValue(&cl_hand, newvalue);
 			break;
 
-		case 2:
+		case 3:
 			if (v_gunkick.value != 0)
 				Cvar_SetValue(&v_gunkick, 0);
 			else
 				Cvar_SetValue(&v_gunkick, 2);
 			break;
 
-		case 3:
+		case 4:
 			Cvar_SetValue(&cl_muzzleflash, !cl_muzzleflash.value);
 			break;
 
-		case 4:
+		case 5:
 			Cvar_SetValue(&cl_viewweapons, !cl_viewweapons.value);
 			break;
 
-		case 6:
+		case 7:
 			Cvar_SetValue(&cl_truelightning, !cl_truelightning.value);
 			break;
 
-		case 7:
+		case 8:
 			newvalue = r_rockettrail.value + 1;
 			if (newvalue > 3)
 				newvalue = 0;
 			Cvar_SetValue(&r_rockettrail, newvalue);
 			break;
 
-		case 8:
+		case 9:
 			newvalue = r_grenadetrail.value + 1;
 			if (newvalue > 3)
 				newvalue = 0;
 			Cvar_SetValue(&r_grenadetrail, newvalue);
 			break;
 
-		case 9:
+		case 10:
 			Cvar_SetValue(&cl_rocket2grenade, !cl_rocket2grenade.value);
 			break;
 
-		case 11:
+		case 12:
 			Cvar_SetValue(&r_rocketlight, !r_rocketlight.value);
 			break;
 
-		case 12:
+		case 13:
 			newvalue = r_rocketlightcolor.value + 1;
 			if (newvalue > 5)
 				newvalue = 0;
 			Cvar_SetValue(&r_rocketlightcolor, newvalue);
 			break;
 
-		case 13:
+		case 14:
 			newvalue = r_explosiontype.value + 1;
 			if (newvalue > 3)
 				newvalue = 0;
 			Cvar_SetValue(&r_explosiontype, newvalue);
 			break;
 
-		case 14:
+		case 15:
 			Cvar_SetValue(&r_explosionlight, !r_explosionlight.value);
 			break;
 
-		case 15:
+		case 16:
 			newvalue = r_explosionlightcolor.value + 1;
 			if (newvalue > 5)
 				newvalue = 0;
@@ -6084,10 +6103,35 @@ void M_Weapons_Key(int k)
 		}
 	}
 
-	if (k == K_UPARROW && (weapons_cursor == 5 || weapons_cursor == 10))
+	if (k == K_UPARROW && (weapons_cursor == 6 || weapons_cursor == 11))
 		weapons_cursor--;
-	else if (k == K_DOWNARROW && (weapons_cursor == 5 || weapons_cursor == 10))
+	else if (k == K_DOWNARROW && (weapons_cursor == 6 || weapons_cursor == 11))
 		weapons_cursor++;
+}
+
+void M_Weapons_MouseSlider(int k, const mouse_state_t *ms)
+{
+	int slider_pos;
+
+	switch (k)
+	{
+	case K_MOUSE2:
+		break;
+
+	case K_MOUSE1:
+		switch (weapons_cursor)
+		{
+		case 1:
+			M_Mouse_Select_Column(&weapons_slider_gun_fovscale_window, ms, 11, &slider_pos);
+			cl_gun_fovscale.value = bound(0, slider_pos * 0.1, 1);
+			Cvar_SetValue(&cl_gun_fovscale, cl_gun_fovscale.value);
+			break;
+
+		default:
+			break;
+		}
+		return;
+	}
 }
 
 qboolean M_Weapons_Mouse_Event(const mouse_state_t *ms)
@@ -6096,6 +6140,8 @@ qboolean M_Weapons_Mouse_Event(const mouse_state_t *ms)
 
 	if (ms->button_up == 1) M_Weapons_Key(K_MOUSE1);
 	if (ms->button_up == 2) M_Weapons_Key(K_MOUSE2);
+
+	if (ms->buttons[1]) M_Weapons_MouseSlider(K_MOUSE1, ms);
 
 	return true;
 }
