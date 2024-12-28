@@ -178,6 +178,9 @@ extern	cvar_t	r_wateralpha;
 extern	cvar_t	r_litwater;
 extern	cvar_t	r_dynamic;
 extern	cvar_t	r_novis;
+extern	cvar_t	r_outline_players;
+extern	cvar_t	r_outline_monsters;
+extern	cvar_t	r_outline_color;
 extern	cvar_t	r_fullbrightskins;
 extern	cvar_t	r_fastsky;
 extern	cvar_t	r_skycolor;
@@ -255,6 +258,8 @@ extern	int	gl_alpha_format;
 extern	cvar_t	gl_max_size;
 extern	cvar_t	gl_playermip;
 extern	cvar_t	gl_picmip;
+
+extern	cvar_t	scr_fov, cl_gun_fovscale;
 
 extern	int		mirrortexturenum;	// quake texturenum, not gltexturenum
 extern	qboolean	mirror;
@@ -367,6 +372,8 @@ extern qboolean gl_glsl_gamma_able;
 extern qboolean gl_glsl_alias_able;
 extern qboolean gl_packed_pixels;
 
+extern qboolean r_outline_monsters_cheatsafe, cl_truelightning_cheatsafe;
+
 typedef struct glsl_attrib_binding_s {
 	const char *name;
 	GLuint attrib;
@@ -403,6 +410,7 @@ extern int turbsin[TURBSINSIZE];
 extern	cvar_t	gl_texturemode;
 extern	cvar_t	gl_texturemode_hud;
 extern	cvar_t	gl_texturemode_sky;
+extern	cvar_t	gl_texture_anisotropy;
 void GL_Set2D (void);
 byte *StringToRGB(char *s);
 void Draw_LoadPics(void);

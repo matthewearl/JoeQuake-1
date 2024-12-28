@@ -31,6 +31,7 @@ extern	cvar_t	cl_hand;
 extern	cvar_t	v_gunkick;
 extern	cvar_t	show_stats;
 extern	cvar_t	show_stats_small;
+extern	cvar_t	show_movekeys;
 
 extern	cvar_t  v_contentblend;
 extern	cvar_t	v_damagecshift;
@@ -66,6 +67,11 @@ float _view_temp_float;
 #define	ELEMENT_Y_COORD(var)	\
 (_view_temp_int = Sbar_GetScaledCharacterSize(), _view_temp_float = Sbar_GetScaleAmount(),\
 ((var##_y.value < 0) ? vid.height - (int)(sb_lines * _view_temp_float) + _view_temp_int * var##_y.value : _view_temp_int * var##_y.value))
+
+typedef enum
+{
+	mk_forward, mk_back, mk_moveleft, mk_moveright, mk_jump, NUM_MOVEMENT_KEYS
+} movekeytype_t;
 
 void V_Init (void);
 void V_RenderView (void);

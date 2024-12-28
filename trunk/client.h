@@ -254,6 +254,9 @@ typedef struct
 	double		freefly_last_time;
 	vec3_t		freefly_origin;
 	vec3_t		freefly_angles;
+
+	float		zoom;
+	float		zoomdir;
 } client_state_t;
 
 extern	client_state_t	cl;
@@ -292,9 +295,11 @@ extern	cvar_t	cl_demospeed;
 extern	cvar_t	cl_maxfps;
 extern	cvar_t	cl_advancedcompletion;
 extern	cvar_t	cl_viewweapons;
+extern	cvar_t	cl_autodemo;
 extern	cvar_t	cl_deadbodyfilter;
 extern	cvar_t	cl_gibfilter;
 extern	cvar_t	cl_confirmquit;
+extern	cvar_t	cl_bbox;
 
 extern	cvar_t	cl_demoui;
 extern	cvar_t	cl_demouitimeout;
