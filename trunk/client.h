@@ -122,6 +122,15 @@ typedef enum
 } cactive_t;
 
 
+typedef enum
+{
+	DEMOCAM_MODE_FIRST_PERSON,
+	DEMOCAM_MODE_FREEFLY,
+	DEMOCAM_MODE_ORBIT,
+	DEMOCAM_MODE_COUNT,
+} democam_mode_t;
+
+
 // the client_static_t structure is persistant through an arbitrary number
 // of server connections
 typedef struct
@@ -249,11 +258,13 @@ typedef struct
 	unsigned	protocolflags;
 
 // freefly
-	qboolean	freefly_enabled;
-	qboolean	freefly_reset;
-	double		freefly_last_time;
-	vec3_t		freefly_origin;
-	vec3_t		freefly_angles;
+	democam_mode_t	democam_mode;
+	qboolean	democam_freefly_reset;
+	double		democam_last_time;
+	vec3_t		democam_freefly_origin;
+	vec3_t		democam_freefly_angles;
+	float		democam_orbit_distance;
+	vec3_t		democam_orbit_angles;
 
 	float		zoom;
 	float		zoomdir;
@@ -505,13 +516,14 @@ dzip_status_t DZip_Open(dzip_context_t *ctx, const char *name, FILE **demo_file_
 void DZip_Cleanup(dzip_context_t *ctx);
 
 
-// cl_freefly.c
-void FreeFly_Init (void);
-void FreeFly_UpdateOrigin (void);
-void FreeFly_MouseMove (double x, double y);
-void FreeFly_SetRefdef (void);
-qboolean FreeFly_MLook (void);
-void FreeFly_DrawPos (void);
+// democam.c
+void DemoCam_Init (void);
+void DemoCam_InitClient (void);
+void DemoCam_UpdateOrigin (void);
+void DemoCam_MouseMove (double x, double y);
+void DemoCam_SetRefdef (void);
+qboolean DemoCam_MLook (void);
+void DemoCam_DrawPos (void);
 
 #ifdef GLQUAKE
 dlighttype_t SetDlightColor (float f, dlighttype_t def, qboolean random);

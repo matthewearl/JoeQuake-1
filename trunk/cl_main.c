@@ -172,6 +172,8 @@ void CL_ClearState (void)
 		cl.free_efrags[i].entnext = &cl.free_efrags[i+1];
 	cl.free_efrags[i].entnext = NULL;
 
+	DemoCam_InitClient();
+
 #ifdef GLQUAKE
 	if (nehahra)
 		SHOWLMP_clear ();
@@ -1206,7 +1208,8 @@ void CL_RelinkEntities (void)
 		}
 #endif
 
-		if (i == cl.viewentity && !cl_thirdperson.value && !cl.freefly_enabled)
+		if (i == cl.viewentity && !cl_thirdperson.value
+				&& cl.democam_mode == DEMOCAM_MODE_FIRST_PERSON)
 			continue;
 
 		// nehahra support
@@ -1452,7 +1455,7 @@ void CL_Init (void)
 	CL_InitTEnts ();
 	Ghost_Init ();
 	CL_InitDemo ();
-	FreeFly_Init ();
+	DemoCam_Init ();
 
 // register our commands
 	Cvar_Register (&cl_name);
