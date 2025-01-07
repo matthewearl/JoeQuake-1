@@ -330,7 +330,7 @@ void CDAudio_Update (void)
 
 	if (bgmvolume.value != cdvolume)
 	{
-        cdvolume = bgmvolume.value;
+		cdvolume = bgmvolume.value;
 		if (!cdvolume)
 			CDAudio_Pause ();
 		else
