@@ -375,6 +375,7 @@ int CDAudio_Init (void)
 	if ((cdfile = open(cd_dev, O_RDONLY)) == -1)
 	{
 		Con_Printf ("CDAudio_Init: open of \"%s\" failed (%i)\n", cd_dev, errno);
+		enabled = false;
 		cdfile = -1;
 		return -1;
 	}

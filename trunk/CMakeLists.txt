@@ -3,163 +3,163 @@ set(CMAKE_C_STANDARD 99)
 find_package(SDL2 REQUIRED)
 
 if (SDL2_FOUND)
-  include_directories(${SDL2_INCLUDE_DIRS})
+	include_directories(${SDL2_INCLUDE_DIRS})
 endif()
 
 add_library(joequake_minizip
-    ioapi.c
-    ioapi.h
-    unzip.c
-    unzip.h
+	ioapi.c
+	ioapi.h
+	unzip.c
+	unzip.h
 )
 target_compile_definitions(joequake_minizip
-    PRIVATE NOUNCRYPT
+	PRIVATE NOUNCRYPT
 )
 target_link_libraries(joequake_minizip
-    PRIVATE z
+	PRIVATE z
 )
 
 add_executable(joequake-gl
-    anorm_dots.h
+	anorm_dots.h
 	bgmusic.c
 	bgmusic.h
-    bspfile.h
-    cdaudio.h
-    cd_linux.c
-    chase.c
-    client.h
-    cl_demo.c
-    cl_demoui.c
-    cl_dzip.c
-    cl_input.c
-    cl_main.c
-    cl_parse.c
-    cl_slist.c
-    cl_slist.h
-    cl_tent.c
-    cmd.c
-    cmd.h
-    common.c
-    common.h
-    console.c
-    console.h
-    crc.c
-    crc.h
-    cvar.c
-    cvar.h
-    draw.h
-    fmod.c
-    fmod.h
-    fmod_errors.h
-    glquake.h
-    gl_decals.c
-    gl_draw.c
-    gl_fog.c
-    gl_mesh.c
-    gl_model.c
-    gl_model.h
-    gl_refrag.c
-    gl_rlight.c
-    gl_rmain.c
-    gl_rmisc.c
-    gl_rpart.c
-    gl_rsurf.c
-    gl_screen.c
-    gl_warp.c
-    host.c
-    host_cmd.c
-    image.c
-    image.h
-    in_sdl.c
-    input.h
-    iplog.c
-    iplog.h
-    keys.c
-    keys.h
-    mathlib.c
-    mathlib.h
-    menu.c
-    menu.h
-    modelgen.h
-    nehahra.c
-    nehahra.h
-    net.h
-    net_bsd.c
-    net_dgrm.c
-    net_dgrm.h
-    net_loop.c
-    net_loop.h
-    net_main.c
-    net_udp.c
-    net_udp.h
-    net_vcr.c
-    net_vcr.h
-    pr_cmds.c
-    pr_comp.h
-    pr_edict.c
-    pr_exec.c
-    progdefs.h
-    progs.h
-    protocol.h
-    quakedef.h
-    quake.ico
-    render.h
-    r_part.c
-    sbar.c
-    sbar.h
-    screen.h
-    security.c
-    security.h
-    server.h
-    snd_codec.c
-    snd_codec.h
-    snd_codeci.h
-    snd_dma.c
-    snd_sdl.c
-    snd_mem.c
-    snd_mix.c
+	bspfile.h
+	cdaudio.h
+	cd_linux.c
+	chase.c
+	client.h
+	cl_demo.c
+	cl_demoui.c
+	cl_dzip.c
+	cl_input.c
+	cl_main.c
+	cl_parse.c
+	cl_slist.c
+	cl_slist.h
+	cl_tent.c
+	cmd.c
+	cmd.h
+	common.c
+	common.h
+	console.c
+	console.h
+	crc.c
+	crc.h
+	cvar.c
+	cvar.h
+	draw.h
+	fmod.c
+	fmod.h
+	fmod_errors.h
+	glquake.h
+	gl_decals.c
+	gl_draw.c
+	gl_fog.c
+	gl_mesh.c
+	gl_model.c
+	gl_model.h
+	gl_refrag.c
+	gl_rlight.c
+	gl_rmain.c
+	gl_rmisc.c
+	gl_rpart.c
+	gl_rsurf.c
+	gl_screen.c
+	gl_warp.c
+	host.c
+	host_cmd.c
+	image.c
+	image.h
+	in_sdl.c
+	input.h
+	iplog.c
+	iplog.h
+	keys.c
+	keys.h
+	mathlib.c
+	mathlib.h
+	menu.c
+	menu.h
+	modelgen.h
+	nehahra.c
+	nehahra.h
+	net.h
+	net_bsd.c
+	net_dgrm.c
+	net_dgrm.h
+	net_loop.c
+	net_loop.h
+	net_main.c
+	net_udp.c
+	net_udp.h
+	net_vcr.c
+	net_vcr.h
+	pr_cmds.c
+	pr_comp.h
+	pr_edict.c
+	pr_exec.c
+	progdefs.h
+	progs.h
+	protocol.h
+	quakedef.h
+	quake.ico
+	render.h
+	r_part.c
+	sbar.c
+	sbar.h
+	screen.h
+	security.c
+	security.h
+	server.h
+	snd_codec.c
+	snd_codec.h
+	snd_codeci.h
+	snd_dma.c
+	snd_sdl.c
+	snd_mem.c
+	snd_mix.c
 	snd_mp3.c
 	snd_mp3.h
-    snd_mp3tag.c
+	snd_mp3tag.c
 	snd_vorbis.c
 	snd_vorbis.h
-    sound.h
-    spritegn.h
-    sv_main.c
-    sv_move.c
-    sv_phys.c
-    sv_user.c
-    sys.h
-    sys_linux.c
-    version.c
-    version.h
-    vid.h
-    vid_common_gl.c
-    vid_sdl.c
-    view.c
-    view.h
-    wad.c
-    wad.h
-    winquake.h
-    world.c
-    world.h
-    zone.c
-    zone.h
-    demoparse.c
-    demoparse.h
-    demoseekparse.c
-    democam.c
-    ghost/ghost.c
-    ghost/ghost.h
-    ghost/ghost_private.h
-    ghost/ghostparse.c
-    ghost/demosummary.c
-    ghost/demosummary.h
+	sound.h
+	spritegn.h
+	sv_main.c
+	sv_move.c
+	sv_phys.c
+	sv_user.c
+	sys.h
+	sys_linux.c
+	version.c
+	version.h
+	vid.h
+	vid_common_gl.c
+	vid_sdl.c
+	view.c
+	view.h
+	wad.c
+	wad.h
+	winquake.h
+	world.c
+	world.h
+	zone.c
+	zone.h
+	demoparse.c
+	demoparse.h
+	demoseekparse.c
+	democam.c
+	ghost/ghost.c
+	ghost/ghost.h
+	ghost/ghost_private.h
+	ghost/ghostparse.c
+	ghost/demosummary.c
+	ghost/demosummary.h
 )
 
 target_compile_definitions(joequake-gl
-    PRIVATE GLQUAKE SDL2 USE_CODEC_VORBIS USE_CODEC_MP3
+	PRIVATE GLQUAKE SDL2 USE_CODEC_VORBIS USE_CODEC_MP3
 )
 target_link_libraries(joequake-gl
-    PRIVATE joequake_minizip png jpeg GL m dl vorbisfile vorbis ogg mad ${SDL2_LIBRARIES}
+	PRIVATE joequake_minizip png jpeg GL m dl vorbisfile vorbis ogg mad ${SDL2_LIBRARIES}
 )
