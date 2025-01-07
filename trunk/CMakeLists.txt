@@ -120,6 +120,7 @@ add_executable(joequake-gl
     snd_mix.c
 	snd_mp3.c
 	snd_mp3.h
+    snd_mp3tag.c
 	snd_vorbis.c
 	snd_vorbis.h
     sound.h
@@ -157,7 +158,7 @@ add_executable(joequake-gl
 )
 
 target_compile_definitions(joequake-gl
-    PRIVATE GLQUAKE SDL2 USE_CODEC_VORBIS
+    PRIVATE GLQUAKE SDL2 USE_CODEC_VORBIS USE_CODEC_MP3
 )
 target_link_libraries(joequake-gl
     PRIVATE joequake_minizip png jpeg GL m dl vorbisfile vorbis ogg mad ${SDL2_LIBRARIES}

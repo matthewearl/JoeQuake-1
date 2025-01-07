@@ -330,18 +330,11 @@ void CDAudio_Update (void)
 
 	if (bgmvolume.value != cdvolume)
 	{
-		if (cdvolume)
-		{
-			Cvar_SetValue (&bgmvolume, 0.0);
-			cdvolume = bgmvolume.value;
+        cdvolume = bgmvolume.value;
+		if (!cdvolume)
 			CDAudio_Pause ();
-		}
 		else
-		{
-			Cvar_SetValue (&bgmvolume, 1.0);
-			cdvolume = bgmvolume.value;
 			CDAudio_Resume ();
-		}
 	}
 
 	if (playing && lastchk < time(NULL))
