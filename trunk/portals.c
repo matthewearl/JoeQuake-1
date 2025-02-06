@@ -453,7 +453,6 @@ static void MakeHeadnodePortals (node_t *node, vec3_t mins, vec3_t maxs)
 	int			i, j, n;
 	portal_t	*p, *portals[6];
 	mplane_t	*pl;
-	int			side;
 	
 // pad with some space so there will never be null volume leafs
 	for (i=0 ; i<3 ; i++)
@@ -488,10 +487,7 @@ static void MakeHeadnodePortals (node_t *node, vec3_t mins, vec3_t maxs)
 			p->plane = pl;
 	
 			p->winding = BaseWindingForPlane (pl);
-			if (side)
-				AddPortalToNodes (p, &outside_node, node);
-			else
-				AddPortalToNodes (p, node, &outside_node);
+			AddPortalToNodes (p, node, &outside_node);
 		}
 		
 // clip the basewindings by all the other planes
