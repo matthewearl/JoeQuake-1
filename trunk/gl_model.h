@@ -616,4 +616,6 @@ byte *Mod_NoVisPVS(model_t *model);
 qboolean Mod_IsAnyKindOfPlayerModel(model_t *mod);
 qboolean Mod_IsMonsterModel(int modelindex);
 
+void TriangulateHull (hull_t *hull, vec3_t mins, vec3_t maxs);
+
 #endif	// __MODEL__
