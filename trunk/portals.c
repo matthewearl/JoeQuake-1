@@ -1,8 +1,8 @@
-#define GLQUAKE  // do not commit
 #include "quakedef.h"
 
 #define MAX_POINTS_ON_WINDING	64
 #define	BOGUS_RANGE	18000
+#define	SIDESPACE	24
 
 typedef struct
 {
@@ -15,7 +15,7 @@ typedef struct
 typedef struct node_s
 {
 // information for decision nodes	
-	int				planenum;		// -1 = leaf node	
+	mplane_t		*plane;
 	struct node_s	*children[2];	// only valid for decision nodes
 	
 // information for leafs
@@ -25,16 +25,18 @@ typedef struct node_s
 
 typedef struct portal_s
 {
-	int			planenum;
+	mplane_t	*plane;
 	node_t		*nodes[2];		// [0] = front side of planenum
 	struct portal_s	*next[2];	
 	winding_t	*winding;
 } portal_t;
 
-static plane_t *planes = NULL;
+static node_t	outside_node;		// portals outside the world face this
+
 
 static winding_t *NewWinding (int points);
 static void FreeWinding (winding_t *w);
+static mplane_t new_planes[6];  // bounding box planes
 
 /*
  * qbsp.c
@@ -45,7 +47,7 @@ static void FreeWinding (winding_t *w);
 BaseWindingForPlane
 =================
 */
-static winding_t *BaseWindingForPlane (plane_t *p)
+static winding_t *BaseWindingForPlane (mplane_t *p)
 {
 	int		i, x;
 	vec_t	max, v;
@@ -121,7 +123,7 @@ If keepon is true, an exactly on-plane winding will be saved, otherwise
 it will be clipped away.
 ==================
 */
-static winding_t *ClipWinding (winding_t *in, plane_t *split, qboolean keepon)
+static winding_t *ClipWinding (winding_t *in, mplane_t *split, qboolean keepon)
 {
 	vec_t	dists[MAX_POINTS_ON_WINDING];
 	int		sides[MAX_POINTS_ON_WINDING];
@@ -227,7 +229,7 @@ returned winding will be the input winding.  If on both sides, two
 new windings will be created.
 ==================
 */
-static void	DivideWinding (winding_t *in, plane_t *split, winding_t **front, winding_t **back)
+static void	DivideWinding (winding_t *in, mplane_t *split, winding_t **front, winding_t **back)
 {
 	vec_t	dists[MAX_POINTS_ON_WINDING];
 	int		sides[MAX_POINTS_ON_WINDING];
@@ -440,13 +442,79 @@ static void RemovePortalFromNode (portal_t *portal, node_t *l)
 
 /*
 ================
+MakeHeadnodePortals
+
+The created portals will face the global outside_node
+================
+*/
+static void MakeHeadnodePortals (node_t *node, vec3_t mins, vec3_t maxs)
+{
+	vec3_t		bounds[2];
+	int			i, j, n;
+	portal_t	*p, *portals[6];
+	mplane_t	*pl;
+	int			side;
+	
+// pad with some space so there will never be null volume leafs
+	for (i=0 ; i<3 ; i++)
+	{
+		bounds[0][i] = mins[i] - SIDESPACE;
+		bounds[1][i] = maxs[i] + SIDESPACE;
+	}
+	
+	outside_node.contents = CONTENTS_SOLID;
+	outside_node.portals = NULL;
+
+	for (i=0 ; i<3 ; i++)
+		for (j=0 ; j<2 ; j++)
+		{
+			n = j*3 + i;
+
+			p = AllocPortal ();
+			portals[n] = p;
+			
+			pl = &new_planes[n];
+			memset (pl, 0, sizeof(*pl));
+			if (j)
+			{
+				pl->normal[i] = -1;
+				pl->dist = -bounds[j][i];
+			}
+			else
+			{
+				pl->normal[i] = 1;
+				pl->dist = bounds[j][i];
+			}
+			p->plane = pl;
+	
+			p->winding = BaseWindingForPlane (pl);
+			if (side)
+				AddPortalToNodes (p, &outside_node, node);
+			else
+				AddPortalToNodes (p, node, &outside_node);
+		}
+		
+// clip the basewindings by all the other planes
+	for (i=0 ; i<6 ; i++)
+	{
+		for (j=0 ; j<6 ; j++)
+		{
+			if (j == i)
+				continue;
+			portals[i]->winding = ClipWinding (portals[i]->winding, &new_planes[j], true);
+		}
+	}
+}
+
+/*
+================
 CutNodePortals_r
 
 ================
 */
 static void CutNodePortals_r (node_t *node)
 {
-	plane_t 	*plane, clipplane;
+	mplane_t 	*plane, clipplane;
 	node_t		*f, *b, *other_node;
 	portal_t	*p, *new_portal, *next_portal;
 	winding_t	*w, *frontwinding, *backwinding;
@@ -462,7 +530,7 @@ static void CutNodePortals_r (node_t *node)
 		return;			// at a leaf, no more dividing
 	}
 
-	plane = &planes[node->planenum];
+	plane = node->plane;
 
 	f = node->children[0];
 	b = node->children[1];
@@ -472,13 +540,13 @@ static void CutNodePortals_r (node_t *node)
 // and clipping it by all of the planes from the other portals
 //
 	new_portal = AllocPortal ();
-	new_portal->planenum = node->planenum;
+	new_portal->plane = node->plane;
 	
-	w = BaseWindingForPlane (&planes[node->planenum]);
+	w = BaseWindingForPlane (node->plane);
 	side = 0;	// shut up compiler warning
 	for (p = node->portals ; p ; p = p->next[side])	
 	{
-		clipplane = planes[p->planenum];
+		clipplane = *p->plane;
 		if (p->nodes[0] == node)
 			side = 0;
 		else if (p->nodes[1] == node)
@@ -565,4 +633,149 @@ static void CutNodePortals_r (node_t *node)
 	
 	CutNodePortals_r (f);	
 	CutNodePortals_r (b);	
+}
+
+/*
+==================
+FreeAllPortals
+
+==================
+*/
+void FreeAllPortals (node_t *node)
+{
+	portal_t	*p, *nextp;
+	
+	if (!node->contents)
+	{
+		FreeAllPortals (node->children[0]);
+		FreeAllPortals (node->children[1]);
+	}
+	
+	for (p=node->portals ; p ; p=nextp)
+	{
+		if (p->nodes[0] == node)
+			nextp = p->next[0];
+		else
+			nextp = p->next[1];
+		RemovePortalFromNode (p, p->nodes[0]);
+		RemovePortalFromNode (p, p->nodes[1]);
+		FreeWinding (p->winding);
+		FreePortal (p);
+	}
+}
+
+/*
+ * new stuff
+ */
+
+
+static node_t *ConvertNodes(hull_t *hull, int idx)
+{
+	mclipnode_t *clipnode;
+	int child_idx;
+	node_t *node;
+
+	node = malloc(sizeof(node_t));
+	if (node == NULL)
+		Sys_Error("Could not allocate node");
+	memset(node, 0, sizeof(node_t));
+
+	node->portals = NULL;
+
+	if (idx >= 0)
+	{
+		clipnode = &hull->clipnodes[idx];
+		node->plane = &hull->planes[clipnode->planenum];
+		node->contents = 0;
+		for (child_idx = 0; child_idx < 2; child_idx++)
+			node->children[child_idx] = ConvertNodes(hull,
+													 clipnode->children[child_idx]);
+	} else {
+		node->contents = idx;
+		for (child_idx = 0; child_idx < 2; child_idx++)
+			node->children[child_idx] = NULL;
+	}
+
+	return node;
+}
+
+static void FreeNode(node_t *node)
+{
+	int child_idx;
+
+	for (child_idx = 0; child_idx < 2; child_idx++)
+		if (node->children[child_idx] != NULL)
+			FreeNode(node->children[child_idx]);
+	free(node);
+}
+
+
+static void ExtractSurfaceTris(node_t *node, FILE *f, int *vertex_count)
+{
+	int i;
+	portal_t *p;
+	winding_t *w;
+
+	if (!node->contents)
+	{
+		ExtractSurfaceTris (node->children[0], f, vertex_count);
+		ExtractSurfaceTris (node->children[1], f, vertex_count);
+		return;
+	}
+
+	if (node->contents != CONTENTS_SOLID)
+		return;
+
+	for (p = node->portals ; p ; )
+	{
+		w = p->winding;
+		if (w && (
+				(p->nodes[0] == node && p->nodes[1]->contents != CONTENTS_SOLID)
+				|| (p->nodes[1] == node && p->nodes[0]->contents != CONTENTS_SOLID)
+			))
+		{
+			for (i=0 ; i<w->numpoints ; i++)
+			{
+				fprintf(f, "v %f %f %f\n", 
+							w->points[i][0],
+							w->points[i][2],
+							w->points[i][1]);
+			}
+
+			fprintf(f, "f ");
+			for (i=0 ; i<w->numpoints; i++)
+			{
+				fprintf(f, "%d", *vertex_count);
+				if (i < w->numpoints - 1)
+					fprintf(f, " ");
+				*vertex_count += 1;
+			}
+			fprintf(f, "\n");
+		}
+		
+		if (p->nodes[0] == node)
+			p = p->next[0];
+		else
+			p = p->next[1];
+	}
+}
+
+void TriangulateHull (hull_t *hull, vec3_t mins, vec3_t maxs)
+{
+	FILE *f;
+	int vertex_count = 0;
+	node_t *root_node;
+
+	root_node = ConvertNodes(hull, 0);
+	MakeHeadnodePortals(root_node, mins, maxs);
+	CutNodePortals_r(root_node);
+
+	f = fopen("hull.obj", "w");
+	if (!f)
+		Sys_Error("Could not open obj file for writing");
+	ExtractSurfaceTris(root_node, f, &vertex_count);
+	fclose(f);
+
+	FreeAllPortals(root_node);
+	FreeNode(root_node);
 }
