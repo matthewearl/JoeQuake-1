@@ -736,16 +736,16 @@ static void ExtractSurfaceTris(node_t *node, FILE *f, int *vertex_count)
 		{
 			for (i=0 ; i<w->numpoints ; i++)
 			{
-				fprintf(f, "v %f %f %f\n", 
+				fprintf(f, "v %f %f %f\n",
 							w->points[i][0],
 							w->points[i][2],
-							w->points[i][1]);
+							-w->points[i][1]);
 			}
 
 			fprintf(f, "f ");
 			for (i=0 ; i<w->numpoints; i++)
 			{
-				fprintf(f, "%d", *vertex_count);
+				fprintf(f, "%d", *vertex_count + 1);
 				if (i < w->numpoints - 1)
 					fprintf(f, " ");
 				*vertex_count += 1;
