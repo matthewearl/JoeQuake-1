@@ -154,7 +154,7 @@ add_executable(joequake-gl
     ghost/demosummary.h
     pathtracer/pathtracer.h
     pathtracer/pathtracer.c
-    portals.c
+    hullmesh.c
 )
 
 target_compile_definitions(joequake-gl

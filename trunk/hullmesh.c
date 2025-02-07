@@ -47,7 +47,7 @@ static void FreeWinding (winding_t *w);
 static mplane_t new_planes[6];  // bounding box planes
 
 /*
- * qbsp.c
+ * The below is adapted from qutils/qbsp/bsp.c in quake-tools
  */
 
 /*
@@ -386,7 +386,7 @@ static void FreePortal (portal_t *p)
 }
 
 /*
- * portals.c
+ * The below is adapted from qutils/qbsp/portals.c in quake-tools
  */
 
 /*
@@ -669,7 +669,7 @@ void FreeAllPortals (node_t *node)
 }
 
 /*
- * new stuff
+ * The below is (largely) new code not adapted from quake-tools.
  */
 
 
