@@ -1,3 +1,5 @@
+#include <assert.h>
+
 #include "quakedef.h"
 
 #define MAX_POINTS_ON_WINDING	64
@@ -30,6 +32,12 @@ typedef struct portal_s
 	struct portal_s	*next[2];	
 	winding_t	*winding;
 } portal_t;
+
+typedef struct
+{
+	vec3_t	position;
+	vec3_t	normal;
+} hull_vertex_t;
 
 static node_t	outside_node;		// portals outside the world face this
 
@@ -745,12 +753,12 @@ typedef struct
 {
 	FILE *f;
 	int vertex_count;
-} write_face_ctx_t;
+} write_face_to_file_ctx_t;
 
-static void WriteFace (portal_t *p, winding_t *w, void *ctx)
+static void WriteFaceToFile (portal_t *p, winding_t *w, void *ctx)
 {
 	int i;
-	write_face_ctx_t *wfctx = ctx;
+	write_face_to_file_ctx_t *wfctx = ctx;
 
 	for (i=0 ; i<w->numpoints ; i++)
 	{
@@ -773,16 +781,92 @@ static void WriteFace (portal_t *p, winding_t *w, void *ctx)
 
 static void ExtractSurfaceTris (node_t *node)
 {
-	write_face_ctx_t wfctx;
+	write_face_to_file_ctx_t wfctx;
 
 	wfctx.vertex_count = 0;
 	wfctx.f = fopen("hull.obj", "w");
 	if (!wfctx.f)
 		Sys_Error("Could not open obj file for writing");
 
-	VisitWindings(node, WriteFace, &wfctx);
+	VisitWindings(node, WriteFaceToFile, &wfctx);
 
 	fclose(wfctx.f);
+}
+
+typedef struct
+{
+	int num_faces;
+	int num_vertices;
+} count_face_ctx_t;
+
+static void CountFace (portal_t *p, winding_t *w, void *ctx)
+{
+	count_face_ctx_t *cfctx = ctx;
+
+	cfctx->num_faces += 1;
+	cfctx->num_vertices += w->numpoints;
+}
+
+typedef struct
+{
+	int num_vertices;
+	int num_indices;
+
+	hull_vertex_t *vertices;
+	int *indices;
+} write_face_ctx_t;
+
+static void WriteFace (portal_t *p, winding_t *w, void *ctx)
+{
+	int i;
+	write_face_ctx_t *wfctx = ctx;
+
+	for (i=0 ; i<w->numpoints ; i++)
+	{
+		VectorCopy(w->points[i], wfctx->vertices[wfctx->num_vertices + i].position);
+		VectorCopy(p->plane->normal, wfctx->vertices[wfctx->num_vertices + i].normal);
+	}
+
+	for (i=0; i<w->numpoints - 2; i++)
+	{
+		wfctx->indices[wfctx->num_indices++] = wfctx->num_vertices;
+		wfctx->indices[wfctx->num_indices++] = wfctx->num_vertices + i + 1;
+		wfctx->indices[wfctx->num_indices++] = wfctx->num_vertices + i + 2;
+	}
+
+	wfctx->num_vertices += w->numpoints;
+}
+
+static void MakeVertexArray (node_t *root_node,
+							 hull_vertex_t **vertices,
+							 int *num_vertices,
+							 int **indices,
+							 int *num_indices)
+{
+	count_face_ctx_t cfctx = {};
+	write_face_ctx_t wfctx = {};
+
+	// Allocate memory for vertices and indices.
+	VisitWindings(root_node, CountFace, &cfctx);
+	*num_vertices = cfctx.num_vertices;
+	*num_indices = 3 * (cfctx.num_vertices - 2 * cfctx.num_faces);
+
+	*vertices = malloc(*num_vertices * sizeof(hull_vertex_t));
+	if (!*vertices)
+		Sys_Error("Could not allocate %d vertices", *num_vertices);
+	memset(*vertices, 0, *num_vertices * sizeof(hull_vertex_t));
+
+	*indices = malloc(*num_indices * sizeof(int));
+	if (!*indices)
+		Sys_Error("Could not allocate %d indices", *num_indices);
+	memset(*indices, 0, *num_indices * sizeof(int));
+
+	// Write the vertices and indices.
+	wfctx.vertices = *vertices;
+	wfctx.indices = *indices;
+	VisitWindings(root_node, WriteFace, &wfctx);
+	assert(wfctx.num_indices == *num_indices);
+	assert(wfctx.num_vertices == *num_vertices);
 }
 
 void TriangulateHull (hull_t *hull, vec3_t mins, vec3_t maxs)
