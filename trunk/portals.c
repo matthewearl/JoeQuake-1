@@ -665,7 +665,7 @@ void FreeAllPortals (node_t *node)
  */
 
 
-static node_t *ConvertNodes(hull_t *hull, int idx)
+static node_t *ConvertNodes (hull_t *hull, int idx)
 {
 	mclipnode_t *clipnode;
 	int child_idx;
@@ -695,7 +695,7 @@ static node_t *ConvertNodes(hull_t *hull, int idx)
 	return node;
 }
 
-static void FreeNode(node_t *node)
+static void FreeNode (node_t *node)
 {
 	int child_idx;
 
@@ -705,17 +705,17 @@ static void FreeNode(node_t *node)
 	free(node);
 }
 
+typedef void (*visit_windings_cb_t)(portal_t *p, winding_t *w, void *ctx);
 
-static void ExtractSurfaceTris(node_t *node, FILE *f, int *vertex_count)
+static void VisitWindings (node_t *node, visit_windings_cb_t cb, void *ctx)
 {
-	int i;
 	portal_t *p;
 	winding_t *w;
 
 	if (!node->contents)
 	{
-		ExtractSurfaceTris (node->children[0], f, vertex_count);
-		ExtractSurfaceTris (node->children[1], f, vertex_count);
+		VisitWindings (node->children[0], cb, ctx);
+		VisitWindings (node->children[1], cb, ctx);
 		return;
 	}
 
@@ -730,23 +730,7 @@ static void ExtractSurfaceTris(node_t *node, FILE *f, int *vertex_count)
 				|| (p->nodes[1] == node && p->nodes[0]->contents != CONTENTS_SOLID)
 			))
 		{
-			for (i=0 ; i<w->numpoints ; i++)
-			{
-				fprintf(f, "v %f %f %f\n",
-							w->points[i][0],
-							w->points[i][2],
-							-w->points[i][1]);
-			}
-
-			fprintf(f, "f ");
-			for (i=0 ; i<w->numpoints; i++)
-			{
-				fprintf(f, "%d", *vertex_count + 1);
-				if (i < w->numpoints - 1)
-					fprintf(f, " ");
-				*vertex_count += 1;
-			}
-			fprintf(f, "\n");
+			cb(p, w, ctx);
 		}
 		
 		if (p->nodes[0] == node)
@@ -754,23 +738,62 @@ static void ExtractSurfaceTris(node_t *node, FILE *f, int *vertex_count)
 		else
 			p = p->next[1];
 	}
+
+}
+
+typedef struct
+{
+	FILE *f;
+	int vertex_count;
+} write_face_ctx_t;
+
+static void WriteFace (portal_t *p, winding_t *w, void *ctx)
+{
+	int i;
+	write_face_ctx_t *wfctx = ctx;
+
+	for (i=0 ; i<w->numpoints ; i++)
+	{
+		fprintf(wfctx->f, "v %f %f %f\n",
+					w->points[i][0],
+					w->points[i][2],
+					-w->points[i][1]);
+	}
+
+	fprintf(wfctx->f, "f ");
+	for (i=0 ; i<w->numpoints; i++)
+	{
+		fprintf(wfctx->f, "%d", wfctx->vertex_count + 1);
+		if (i < w->numpoints - 1)
+			fprintf(wfctx->f, " ");
+		wfctx->vertex_count += 1;
+	}
+	fprintf(wfctx->f, "\n");
+}
+
+static void ExtractSurfaceTris (node_t *node)
+{
+	write_face_ctx_t wfctx;
+
+	wfctx.vertex_count = 0;
+	wfctx.f = fopen("hull.obj", "w");
+	if (!wfctx.f)
+		Sys_Error("Could not open obj file for writing");
+
+	VisitWindings(node, WriteFace, &wfctx);
+
+	fclose(wfctx.f);
 }
 
 void TriangulateHull (hull_t *hull, vec3_t mins, vec3_t maxs)
 {
-	FILE *f;
-	int vertex_count = 0;
 	node_t *root_node;
 
 	root_node = ConvertNodes(hull, 0);
 	MakeHeadnodePortals(root_node, mins, maxs);
 	CutNodePortals_r(root_node);
 
-	f = fopen("hull.obj", "w");
-	if (!f)
-		Sys_Error("Could not open obj file for writing");
-	ExtractSurfaceTris(root_node, f, &vertex_count);
-	fclose(f);
+	ExtractSurfaceTris(root_node);
 
 	FreeAllPortals(root_node);
 	FreeNode(root_node);
