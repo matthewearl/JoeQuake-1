@@ -1517,9 +1517,6 @@ void SV_SpawnServer (char *server)
 		sv.active = false;
 		return;
 	}
-	TriangulateHull(&sv.worldmodel->hulls[0],
-					&sv.worldmodel->nodes[0].minmaxs[0],
-					&sv.worldmodel->nodes[0].minmaxs[3]);
 	sv.models[1] = sv.worldmodel;
 
 // clear world interaction links

@@ -2063,7 +2063,10 @@ void R_DrawTextureChains(model_t *model, entity_t *ent, texchain_t chain)
 
 	if (r_world_program != 0)
 	{
-		R_DrawTextureChains_GLSL(model, chain);
+		if (model != cl.worldmodel)
+			R_DrawTextureChains_GLSL(model, chain);
+		else
+			GlHullMesh_Render();
 		return;
 	}
 

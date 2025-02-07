@@ -33,12 +33,6 @@ typedef struct portal_s
 	winding_t	*winding;
 } portal_t;
 
-typedef struct
-{
-	vec3_t	position;
-	vec3_t	normal;
-} hull_vertex_t;
-
 static node_t	outside_node;		// portals outside the world face this
 
 
@@ -751,50 +745,6 @@ static void VisitWindings (node_t *node, visit_windings_cb_t cb, void *ctx)
 
 typedef struct
 {
-	FILE *f;
-	int vertex_count;
-} write_face_to_file_ctx_t;
-
-static void WriteFaceToFile (portal_t *p, winding_t *w, void *ctx)
-{
-	int i;
-	write_face_to_file_ctx_t *wfctx = ctx;
-
-	for (i=0 ; i<w->numpoints ; i++)
-	{
-		fprintf(wfctx->f, "v %f %f %f\n",
-					w->points[i][0],
-					w->points[i][2],
-					-w->points[i][1]);
-	}
-
-	fprintf(wfctx->f, "f ");
-	for (i=0 ; i<w->numpoints; i++)
-	{
-		fprintf(wfctx->f, "%d", wfctx->vertex_count + 1);
-		if (i < w->numpoints - 1)
-			fprintf(wfctx->f, " ");
-		wfctx->vertex_count += 1;
-	}
-	fprintf(wfctx->f, "\n");
-}
-
-static void ExtractSurfaceTris (node_t *node)
-{
-	write_face_to_file_ctx_t wfctx;
-
-	wfctx.vertex_count = 0;
-	wfctx.f = fopen("hull.obj", "w");
-	if (!wfctx.f)
-		Sys_Error("Could not open obj file for writing");
-
-	VisitWindings(node, WriteFaceToFile, &wfctx);
-
-	fclose(wfctx.f);
-}
-
-typedef struct
-{
 	int num_faces;
 	int num_vertices;
 } count_face_ctx_t;
@@ -837,14 +787,21 @@ static void WriteFace (portal_t *p, winding_t *w, void *ctx)
 	wfctx->num_vertices += w->numpoints;
 }
 
-static void MakeVertexArray (node_t *root_node,
-							 hull_vertex_t **vertices,
-							 int *num_vertices,
-							 int **indices,
-							 int *num_indices)
+void HullMesh_MakeVertexArray (hull_t *hull,
+							   vec3_t mins, vec3_t maxs,
+							   hull_vertex_t **vertices,
+							   int *num_vertices,
+							   int **indices,
+							   int *num_indices)
 {
+	node_t *root_node;
 	count_face_ctx_t cfctx = {};
 	write_face_ctx_t wfctx = {};
+
+    // Portalize the hull.
+	root_node = ConvertNodes(hull, 0);
+	MakeHeadnodePortals(root_node, mins, maxs);
+	CutNodePortals_r(root_node);
 
 	// Allocate memory for vertices and indices.
 	VisitWindings(root_node, CountFace, &cfctx);
@@ -867,18 +824,8 @@ static void MakeVertexArray (node_t *root_node,
 	VisitWindings(root_node, WriteFace, &wfctx);
 	assert(wfctx.num_indices == *num_indices);
 	assert(wfctx.num_vertices == *num_vertices);
-}
 
-void TriangulateHull (hull_t *hull, vec3_t mins, vec3_t maxs)
-{
-	node_t *root_node;
-
-	root_node = ConvertNodes(hull, 0);
-	MakeHeadnodePortals(root_node, mins, maxs);
-	CutNodePortals_r(root_node);
-
-	ExtractSurfaceTris(root_node);
-
+    // Free the portal data structures.
 	FreeAllPortals(root_node);
 	FreeNode(root_node);
 }
