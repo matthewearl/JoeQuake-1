@@ -105,9 +105,7 @@ void GlHullMesh_Render (void)
 							(void *)offsetof(hull_vertex_t, normal));
 
 	GL_BindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
-	glDisable(GL_CULL_FACE);
-    glDrawElements(GL_TRIANGLES, num_indices, GL_UNSIGNED_INT, 0);
-	glEnable(GL_CULL_FACE);
+	glDrawElements(GL_TRIANGLES, num_indices, GL_UNSIGNED_INT, 0);
 
 	qglDisableVertexAttribArray(normal_attr);
 	qglDisableVertexAttribArray(position_attr);

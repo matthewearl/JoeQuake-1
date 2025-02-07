@@ -707,7 +707,8 @@ static void FreeNode (node_t *node)
 	free(node);
 }
 
-typedef void (*visit_windings_cb_t)(portal_t *p, winding_t *w, void *ctx);
+typedef void (*visit_windings_cb_t)(portal_t *p, winding_t *w, qboolean flipped,
+									void *ctx);
 
 static void VisitWindings (node_t *node, visit_windings_cb_t cb, void *ctx)
 {
@@ -732,7 +733,7 @@ static void VisitWindings (node_t *node, visit_windings_cb_t cb, void *ctx)
 				|| (p->nodes[1] == node && p->nodes[0]->contents != CONTENTS_SOLID)
 			))
 		{
-			cb(p, w, ctx);
+			cb(p, w, (p->nodes[0] == node), ctx);
 		}
 		
 		if (p->nodes[0] == node)
@@ -749,7 +750,7 @@ typedef struct
 	int num_vertices;
 } count_face_ctx_t;
 
-static void CountFace (portal_t *p, winding_t *w, void *ctx)
+static void CountFace (portal_t *p, winding_t *w, qboolean flipped, void *ctx)
 {
 	count_face_ctx_t *cfctx = ctx;
 
@@ -766,22 +767,39 @@ typedef struct
 	int *indices;
 } write_face_ctx_t;
 
-static void WriteFace (portal_t *p, winding_t *w, void *ctx)
+static void WriteFace (portal_t *p, winding_t *w, qboolean flipped, void *ctx)
 {
-	int i;
+	int i, offs1, offs2;
 	write_face_ctx_t *wfctx = ctx;
 
 	for (i=0 ; i<w->numpoints ; i++)
 	{
 		VectorCopy(w->points[i], wfctx->vertices[wfctx->num_vertices + i].position);
-		VectorCopy(p->plane->normal, wfctx->vertices[wfctx->num_vertices + i].normal);
+
+		if (!flipped)
+			VectorCopy(p->plane->normal, wfctx->vertices[wfctx->num_vertices + i].normal);
+		else
+			VectorSubtract(vec3_origin,
+							p->plane->normal,
+							wfctx->vertices[wfctx->num_vertices + i].normal);
+	}
+
+	if (!flipped)
+	{
+		offs1 = 1;
+		offs2 = 2;
+	}
+	else
+	{
+		offs1 = 2;
+		offs2 = 1;
 	}
 
 	for (i=0; i<w->numpoints - 2; i++)
 	{
 		wfctx->indices[wfctx->num_indices++] = wfctx->num_vertices;
-		wfctx->indices[wfctx->num_indices++] = wfctx->num_vertices + i + 1;
-		wfctx->indices[wfctx->num_indices++] = wfctx->num_vertices + i + 2;
+		wfctx->indices[wfctx->num_indices++] = wfctx->num_vertices + i + offs1;
+		wfctx->indices[wfctx->num_indices++] = wfctx->num_vertices + i + offs2;
 	}
 
 	wfctx->num_vertices += w->numpoints;
