@@ -155,6 +155,7 @@ add_executable(joequake-gl
     pathtracer/pathtracer.h
     pathtracer/pathtracer.c
     hullmesh.c
+    gl_hullmesh.c
 )
 
 target_compile_definitions(joequake-gl

@@ -616,6 +616,21 @@ byte *Mod_NoVisPVS(model_t *model);
 qboolean Mod_IsAnyKindOfPlayerModel(model_t *mod);
 qboolean Mod_IsMonsterModel(int modelindex);
 
-void TriangulateHull (hull_t *hull, vec3_t mins, vec3_t maxs);
+
+typedef struct
+{
+	vec3_t	position;
+	vec3_t	normal;
+} hull_vertex_t;
+
+void HullMesh_MakeVertexArray (hull_t *hull,
+							   vec3_t mins, vec3_t maxs,
+							   hull_vertex_t **vertices,
+							   int *num_vertices,
+							   int **indices,
+							   int *num_indices);
+void GlHullMesh_CreateShaders (void);
+void GlHullMesh_BuildVertexBuffer (hull_t *hull, vec3_t mins, vec3_t maxs);
+void GlHullMesh_Render (void);
 
 #endif	// __MODEL__
