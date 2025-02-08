@@ -53,14 +53,15 @@ void GlHullMesh_CreateShaders (void)
 
 }
 
-void GlHullMesh_BuildVertexBuffer (hull_t *hull, vec3_t mins, vec3_t maxs)
+void GlHullMesh_BuildVertexBuffer (void)
 {
 	hull_vertex_t *vertices;
 	int num_vertices;
 	int *indices;
 
 	// Convert the hull to a mesh.
-	HullMesh_MakeVertexArray(hull, mins, maxs, &vertices, &num_vertices,
+	HullMesh_MakeVertexArray(1,
+							 &vertices, &num_vertices,
 							 &indices, &num_indices);
 
 	// Move the vertices into a vertex buffer.
@@ -84,7 +85,7 @@ void GlHullMesh_BuildVertexBuffer (hull_t *hull, vec3_t mins, vec3_t maxs)
 	free(indices);
 }
 
-void GlHullMesh_Render (void)
+void GlHullMesh_Render (model_t *model)
 {
 	if (hull_program == 0)
 		Sys_Error("Hull program not compiled yet");
@@ -105,7 +106,8 @@ void GlHullMesh_Render (void)
 							(void *)offsetof(hull_vertex_t, normal));
 
 	GL_BindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
-	glDrawElements(GL_TRIANGLES, num_indices, GL_UNSIGNED_INT, 0);
+	glDrawElements(GL_TRIANGLES, model->hullmesh_count, GL_UNSIGNED_INT,
+					(void *)(sizeof(int) * model->hullmesh_start));
 
 	qglDisableVertexAttribArray(normal_attr);
 	qglDisableVertexAttribArray(position_attr);

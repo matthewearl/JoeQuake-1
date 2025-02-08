@@ -599,6 +599,8 @@ typedef struct model_s
 
 // additional model data
 	cache_user_t cache;		// only access through Mod_Extradata
+
+	int			hullmesh_start, hullmesh_count;	// hull mesh element array indices
 } model_t;
 
 //============================================================================
@@ -623,14 +625,13 @@ typedef struct
 	vec3_t	normal;
 } hull_vertex_t;
 
-void HullMesh_MakeVertexArray (hull_t *hull,
-							   vec3_t mins, vec3_t maxs,
+void HullMesh_MakeVertexArray (int hull_idx,
 							   hull_vertex_t **vertices,
 							   int *num_vertices,
 							   int **indices,
 							   int *num_indices);
 void GlHullMesh_CreateShaders (void);
-void GlHullMesh_BuildVertexBuffer (hull_t *hull, vec3_t mins, vec3_t maxs);
-void GlHullMesh_Render (void);
+void GlHullMesh_BuildVertexBuffer (void);
+void GlHullMesh_Render (model_t *model);
 
 #endif	// __MODEL__

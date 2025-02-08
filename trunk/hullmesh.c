@@ -805,24 +805,70 @@ static void WriteFace (portal_t *p, winding_t *w, qboolean flipped, void *ctx)
 	wfctx->num_vertices += w->numpoints;
 }
 
-void HullMesh_MakeVertexArray (hull_t *hull,
-							   vec3_t mins, vec3_t maxs,
+static node_t *PortalizeSubModel (model_t *model, int hull_idx)
+{
+	node_t *root_node;
+
+	root_node = ConvertNodes(&model->hulls[hull_idx],
+								model->hulls[hull_idx].firstclipnode);
+	MakeHeadnodePortals(
+		root_node,
+		&model->nodes[0].minmaxs[0],
+		&model->nodes[0].minmaxs[3]
+	);
+	CutNodePortals_r(root_node);
+
+	return root_node;
+}
+
+void HullMesh_MakeVertexArray (int hull_idx,
 							   hull_vertex_t **vertices,
 							   int *num_vertices,
 							   int **indices,
 							   int *num_indices)
 {
-	node_t *root_node;
+	int i;
+	char submodel_name[10];
+	model_t **submodels;
+	int num_submodels;
+	node_t **root_nodes;
 	count_face_ctx_t cfctx = {};
 	write_face_ctx_t wfctx = {};
 
-    // Portalize the hull.
-	root_node = ConvertNodes(hull, 0);
-	MakeHeadnodePortals(root_node, mins, maxs);
-	CutNodePortals_r(root_node);
+	// Allocate root nodes.
+	num_submodels = cl.worldmodel->numsubmodels;
+	//num_submodels = 2;
+	root_nodes = malloc(sizeof(node_t*) * num_submodels);
+	if (!root_nodes)
+		Sys_Error("Could not allocate %d root node pointers\n",
+					num_submodels);
+	memset(root_nodes, 0, sizeof(node_t*) * num_submodels);
+
+	// Allocate sub-model pointers.
+	submodels = malloc(sizeof(model_t*) * num_submodels);
+	if (!submodels)
+		Sys_Error("Could not allocate %d sub-model pointers\n",
+					num_submodels);
+	memset(submodels, 0, sizeof(model_t*) * num_submodels);
+
+	// Set sub-model pointers.
+	submodels[0] = cl.worldmodel;
+	for (i = 1; i < num_submodels; i++)
+	{
+		snprintf(submodel_name, sizeof(submodel_name), "*%d", i);
+		submodels[i] = Mod_ForName(submodel_name, true);
+		assert(!submodels[i]->needload);
+	}
+
+    // Portalize each submodel's hull.
+	for (i = 0; i < num_submodels; i++)
+	{
+		root_nodes[i] = PortalizeSubModel(submodels[i], hull_idx);
+	}
 
 	// Allocate memory for vertices and indices.
-	VisitWindings(root_node, CountFace, &cfctx);
+	for (i = 0; i < num_submodels; i++)
+		VisitWindings(root_nodes[i], CountFace, &cfctx);
 	*num_vertices = cfctx.num_vertices;
 	*num_indices = 3 * (cfctx.num_vertices - 2 * cfctx.num_faces);
 
@@ -839,11 +885,22 @@ void HullMesh_MakeVertexArray (hull_t *hull,
 	// Write the vertices and indices.
 	wfctx.vertices = *vertices;
 	wfctx.indices = *indices;
-	VisitWindings(root_node, WriteFace, &wfctx);
+	for (i = 0; i < num_submodels; i++)
+	{
+		submodels[i]->hullmesh_start = wfctx.num_indices;
+		VisitWindings(root_nodes[i], WriteFace, &wfctx);
+		submodels[i]->hullmesh_count = (wfctx.num_indices
+										- submodels[i]->hullmesh_start);
+	}
 	assert(wfctx.num_indices == *num_indices);
 	assert(wfctx.num_vertices == *num_vertices);
 
-    // Free the portal data structures.
-	FreeAllPortals(root_node);
-	FreeNode(root_node);
+    // Free everything.
+	for (i = 0; i < num_submodels; i++)
+	{
+		FreeAllPortals(root_nodes[i]);
+		FreeNode(root_nodes[i]);
+	}
+	free(submodels);
+	free(root_nodes);
 }
