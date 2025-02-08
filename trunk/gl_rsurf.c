@@ -2027,6 +2027,12 @@ void R_DrawTextureChains(model_t *model, entity_t *ent, texchain_t chain)
 {
 	float entalpha;
 
+	if (model->hullmesh_start != -1)
+	{
+		GlHullMesh_Render(model);
+		return;
+	}
+
 	entalpha = (ent != NULL) ? ent->transparency : 1.0f;
 	
 	R_UploadLightmaps();
@@ -2061,21 +2067,17 @@ void R_DrawTextureChains(model_t *model, entity_t *ent, texchain_t chain)
 		return;
 	}
 
-	if (model->hullmesh_start == -1)
+	if (r_world_program != 0)
 	{
-		if (r_world_program != 0)
-		{
-			R_DrawTextureChains_GLSL(model, chain);
-			return;
-		}
-
+		R_DrawTextureChains_GLSL(model, chain);
+	}
+	else
+	{
 		R_BeginTransparentDrawing(entalpha);
 
 		R_DrawTextureChains_Multitexture(model, chain);
 
 		R_EndTransparentDrawing(entalpha);
-	} else {
-		GlHullMesh_Render(model);
 	}
 }
 
