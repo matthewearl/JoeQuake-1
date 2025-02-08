@@ -79,6 +79,7 @@ lpUniform1iFUNC qglUniform1i = NULL; //ericw
 lpUniform1ivFUNC qglUniform1iv = NULL;
 lpUniform1fFUNC qglUniform1f = NULL; //ericw
 lpUniform3fFUNC qglUniform3f = NULL; //ericw
+lpUniform3fvFUNC qglUniform3fv = NULL; //ericw
 lpUniform4fFUNC qglUniform4f = NULL; //ericw
 lpUniformMatrix4fvFUNC qglUniformMatrix4fv = NULL;
 lpTexBufferFUNC qglTexBuffer = NULL;
@@ -242,6 +243,7 @@ void CheckGLSLExtensions(void)
 		qglUniform1iv = (void *)qglGetProcAddress("glUniform1iv");
 		qglUniform1f = (void *)qglGetProcAddress("glUniform1f");
 		qglUniform3f = (void *)qglGetProcAddress("glUniform3f");
+		qglUniform3fv = (void *)qglGetProcAddress("glUniform3fv");
 		qglUniform4f = (void *)qglGetProcAddress("glUniform4f");
 		qglUniformMatrix4fv = (void *)qglGetProcAddress("glUniformMatrix4fv");
 		qglTexBuffer = (void *)qglGetProcAddress("glTexBuffer");
@@ -272,6 +274,7 @@ void CheckGLSLExtensions(void)
 			qglUniform1iv &&
 			qglUniform1f &&
 			qglUniform3f &&
+			qglUniform3fv &&
 			qglUniform4f &&
 			qglUniformMatrix4fv &&
 			qglTexBuffer &&
