@@ -33,9 +33,6 @@ typedef struct portal_s
 	winding_t	*winding;
 } portal_t;
 
-static node_t	outside_node;		// portals outside the world face this
-
-
 static winding_t *NewWinding (int points);
 static void FreeWinding (winding_t *w);
 static mplane_t new_planes[6];  // bounding box planes
@@ -449,12 +446,13 @@ MakeHeadnodePortals
 The created portals will face the global outside_node
 ================
 */
-static void MakeHeadnodePortals (node_t *node, vec3_t mins, vec3_t maxs)
+static node_t *MakeHeadnodePortals (node_t *node, vec3_t mins, vec3_t maxs)
 {
 	vec3_t		bounds[2];
 	int			i, j, n;
 	portal_t	*p, *portals[6];
 	mplane_t	*pl;
+	node_t		*outside_node;
 	
 // pad with some space so there will never be null volume leafs
 	for (i=0 ; i<3 ; i++)
@@ -463,8 +461,12 @@ static void MakeHeadnodePortals (node_t *node, vec3_t mins, vec3_t maxs)
 		bounds[1][i] = maxs[i] + SIDESPACE;
 	}
 	
-	outside_node.contents = CONTENTS_SOLID;
-	outside_node.portals = NULL;
+	outside_node = malloc(sizeof(node_t));
+	if (outside_node == NULL)
+		Sys_Error("Could not allocate outside node");
+	memset(outside_node, 0, sizeof(node_t));
+	outside_node->contents = CONTENTS_SOLID;
+	outside_node->portals = NULL;
 
 	for (i=0 ; i<3 ; i++)
 		for (j=0 ; j<2 ; j++)
@@ -489,7 +491,7 @@ static void MakeHeadnodePortals (node_t *node, vec3_t mins, vec3_t maxs)
 			p->plane = pl;
 	
 			p->winding = BaseWindingForPlane (pl);
-			AddPortalToNodes (p, node, &outside_node);
+			AddPortalToNodes (p, node, outside_node);
 		}
 		
 // clip the basewindings by all the other planes
@@ -502,6 +504,8 @@ static void MakeHeadnodePortals (node_t *node, vec3_t mins, vec3_t maxs)
 			portals[i]->winding = ClipWinding (portals[i]->winding, &new_planes[j], true);
 		}
 	}
+
+	return outside_node;
 }
 
 /*
@@ -805,20 +809,18 @@ static void WriteFace (portal_t *p, winding_t *w, qboolean flipped, void *ctx)
 	wfctx->num_vertices += w->numpoints;
 }
 
-static node_t *PortalizeSubModel (model_t *model, int hull_idx)
+static node_t *PortalizeSubModel (model_t *model, int hull_idx,
+								  node_t **root_node,
+								  node_t **outside_node)
 {
-	node_t *root_node;
-
-	root_node = ConvertNodes(&model->hulls[hull_idx],
+	*root_node = ConvertNodes(&model->hulls[hull_idx],
 								model->hulls[hull_idx].firstclipnode);
-	MakeHeadnodePortals(
-		root_node,
+	*outside_node = MakeHeadnodePortals(
+		*root_node,
 		&model->nodes[0].minmaxs[0],
 		&model->nodes[0].minmaxs[3]
 	);
-	CutNodePortals_r(root_node);
-
-	return root_node;
+	CutNodePortals_r(*root_node);
 }
 
 void HullMesh_MakeVertexArray (int hull_idx,
@@ -828,21 +830,29 @@ void HullMesh_MakeVertexArray (int hull_idx,
 							   int *num_indices)
 {
 	int i;
-	char submodel_name[10];
+	char submodel_name[16];
 	model_t **submodels;
 	int num_submodels;
 	node_t **root_nodes;
+	node_t **outside_nodes;
 	count_face_ctx_t cfctx = {};
 	write_face_ctx_t wfctx = {};
 
-	// Allocate root nodes.
 	num_submodels = cl.worldmodel->numsubmodels;
-	//num_submodels = 2;
+
+	// Allocate root nodes.
 	root_nodes = malloc(sizeof(node_t*) * num_submodels);
 	if (!root_nodes)
 		Sys_Error("Could not allocate %d root node pointers\n",
 					num_submodels);
 	memset(root_nodes, 0, sizeof(node_t*) * num_submodels);
+
+	// Allocate outside nodes.
+	outside_nodes = malloc(sizeof(node_t*) * num_submodels);
+	if (!outside_nodes)
+		Sys_Error("Could not allocate %d outside node pointers\n",
+					num_submodels);
+	memset(outside_nodes, 0, sizeof(node_t*) * num_submodels);
 
 	// Allocate sub-model pointers.
 	submodels = malloc(sizeof(model_t*) * num_submodels);
@@ -863,7 +873,9 @@ void HullMesh_MakeVertexArray (int hull_idx,
     // Portalize each submodel's hull.
 	for (i = 0; i < num_submodels; i++)
 	{
-		root_nodes[i] = PortalizeSubModel(submodels[i], hull_idx);
+		PortalizeSubModel(submodels[i], hull_idx,
+				&root_nodes[i],
+				&outside_nodes[i]);
 	}
 
 	// Allocate memory for vertices and indices.
@@ -902,5 +914,6 @@ void HullMesh_MakeVertexArray (int hull_idx,
 		FreeNode(root_nodes[i]);
 	}
 	free(submodels);
+	free(outside_nodes);
 	free(root_nodes);
 }
