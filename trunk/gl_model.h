@@ -601,6 +601,7 @@ typedef struct model_s
 	cache_user_t cache;		// only access through Mod_Extradata
 
 	int			hullmesh_start, hullmesh_count;	// hull mesh element array indices
+	int			hullmesh_line_start, hullmesh_line_count;
 } model_t;
 
 //============================================================================

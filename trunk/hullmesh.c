@@ -809,6 +809,22 @@ static void WriteFace (portal_t *p, winding_t *w, qboolean flipped, void *ctx)
 	wfctx->num_vertices += w->numpoints;
 }
 
+static void WriteFaceLines (portal_t *p, winding_t *w, qboolean flipped, void *ctx)
+{
+	int i;
+	write_face_ctx_t *wfctx = ctx;
+
+	for (i=0; i<w->numpoints - 1; i++)
+	{
+		wfctx->indices[wfctx->num_indices++] = wfctx->num_vertices + i;
+		wfctx->indices[wfctx->num_indices++] = wfctx->num_vertices + i + 1;
+	}
+	wfctx->indices[wfctx->num_indices++] = wfctx->num_vertices + w->numpoints - 1;
+	wfctx->indices[wfctx->num_indices++] = wfctx->num_vertices;
+
+	wfctx->num_vertices += w->numpoints;
+}
+
 static node_t *PortalizeSubModel (model_t *model, int hull_idx,
 								  node_t **root_node,
 								  node_t **outside_node)
@@ -882,7 +898,8 @@ void HullMesh_MakeVertexArray (int hull_idx,
 	for (i = 0; i < num_submodels; i++)
 		VisitWindings(root_nodes[i], CountFace, &cfctx);
 	*num_vertices = cfctx.num_vertices;
-	*num_indices = 3 * (cfctx.num_vertices - 2 * cfctx.num_faces);
+	*num_indices = 3 * (cfctx.num_vertices - 2 * cfctx.num_faces)
+				   + 2 * cfctx.num_vertices;
 
 	*vertices = malloc(*num_vertices * sizeof(hull_vertex_t));
 	if (!*vertices)
@@ -904,8 +921,19 @@ void HullMesh_MakeVertexArray (int hull_idx,
 		submodels[i]->hullmesh_count = (wfctx.num_indices
 										- submodels[i]->hullmesh_start);
 	}
-	assert(wfctx.num_indices == *num_indices);
 	assert(wfctx.num_vertices == *num_vertices);
+
+	// Write the line indices.
+	wfctx.num_vertices = 0;
+	for (i = 0; i < num_submodels; i++)
+	{
+		submodels[i]->hullmesh_line_start = wfctx.num_indices;
+		VisitWindings(root_nodes[i], WriteFaceLines, &wfctx);
+		submodels[i]->hullmesh_line_count = (wfctx.num_indices
+										     - submodels[i]->hullmesh_line_start);
+	}
+	assert(wfctx.num_vertices == *num_vertices);
+	assert(wfctx.num_indices == *num_indices);
 
     // Free everything.
 	for (i = 0; i < num_submodels; i++)

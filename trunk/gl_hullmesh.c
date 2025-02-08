@@ -6,6 +6,7 @@ static GLuint ibo = 0;
 static const GLuint position_attr = 0;
 static const GLuint normal_attr = 1;
 static GLuint hull_program = 0;
+static GLuint is_line_loc;
 
 static void checkGlError (void)
 {
@@ -25,6 +26,8 @@ void GlHullMesh_CreateShaders (void)
 	const GLchar *vert_source =
 		"#version 130\n"
 		"\n"
+		"uniform int is_line;\n"
+		"\n"
 		"attribute vec3 position;\n"
 		"attribute vec3 normal;\n"
 		"\n"
@@ -32,6 +35,7 @@ void GlHullMesh_CreateShaders (void)
 		"\n"
 		"void main() {\n"
 		"    gl_Position = gl_ModelViewProjectionMatrix * vec4(position, 1.0);\n"
+		"    gl_Position.z -= 5e-2 * is_line;"
 		"    frag_normal = normal;\n"
 		"}\n";
 
@@ -39,11 +43,13 @@ void GlHullMesh_CreateShaders (void)
 	const GLchar *frag_source =
 		"#version 130\n"
 		"\n"
+		"uniform int is_line;\n"
+		"\n"
 		"varying vec3 frag_normal;\n"
 		"\n"
 		"void main() {\n"
 		"    vec3 color = frag_normal * 0.5 + 0.5;\n"
-		"    gl_FragColor = vec4(color, 1.0);\n"
+		"    gl_FragColor = vec4(color * (1 - is_line), 1.0 - 0.8 * is_line);\n"
 		"}\n";
 
 	hull_program = GL_CreateProgram(vert_source, frag_source, 0, NULL);
@@ -51,6 +57,7 @@ void GlHullMesh_CreateShaders (void)
 	if (hull_program == 0)
 		Sys_Error("Could not compile program");
 
+	is_line_loc = GL_GetUniformLocation(&hull_program, "is_line");
 }
 
 void GlHullMesh_BuildVertexBuffer (void)
@@ -58,6 +65,8 @@ void GlHullMesh_BuildVertexBuffer (void)
 	hull_vertex_t *vertices;
 	int num_vertices;
 	int *indices;
+	int num_line_indices;
+	int *line_indices;
 
 	// Convert the hull to a mesh.
 	HullMesh_MakeVertexArray(1,
@@ -106,8 +115,17 @@ void GlHullMesh_Render (model_t *model)
 							(void *)offsetof(hull_vertex_t, normal));
 
 	GL_BindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
+	
+	qglUniform1i(is_line_loc, 0);
 	glDrawElements(GL_TRIANGLES, model->hullmesh_count, GL_UNSIGNED_INT,
 					(void *)(sizeof(int) * model->hullmesh_start));
+
+	qglUniform1i(is_line_loc, 1);
+	glEnable(GL_BLEND);
+	glDrawElements(GL_LINES, model->hullmesh_line_count, GL_UNSIGNED_INT,
+					(void *)(sizeof(int) * model->hullmesh_line_start));
+	glDisable(GL_BLEND);
+	glDisable(GL_LINE_SMOOTH);
 
 	qglDisableVertexAttribArray(normal_attr);
 	qglDisableVertexAttribArray(position_attr);
