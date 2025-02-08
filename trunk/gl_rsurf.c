@@ -2061,20 +2061,22 @@ void R_DrawTextureChains(model_t *model, entity_t *ent, texchain_t chain)
 		return;
 	}
 
-	if (r_world_program != 0)
+	if (model->hullmesh_start == -1)
 	{
-		if (model != cl.worldmodel)
+		if (r_world_program != 0)
+		{
 			R_DrawTextureChains_GLSL(model, chain);
-		else
-			GlHullMesh_Render();
-		return;
+			return;
+		}
+
+		R_BeginTransparentDrawing(entalpha);
+
+		R_DrawTextureChains_Multitexture(model, chain);
+
+		R_EndTransparentDrawing(entalpha);
+	} else {
+		GlHullMesh_Render(model);
 	}
-
-	R_BeginTransparentDrawing(entalpha);
-
-	R_DrawTextureChains_Multitexture(model, chain);
-
-	R_EndTransparentDrawing(entalpha);
 }
 
 /*

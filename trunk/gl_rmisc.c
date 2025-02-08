@@ -378,9 +378,7 @@ void R_NewMap(void)
 
 	GL_BuildLightmaps();
 	GL_BuildBModelVertexBuffer();
-	GlHullMesh_BuildVertexBuffer(&cl.worldmodel->hulls[0],
-								 &cl.worldmodel->nodes[0].minmaxs[0],
-								 &cl.worldmodel->nodes[0].minmaxs[3]);
+	GlHullMesh_BuildVertexBuffer();
 
 	r_framecount = 0; //johnfitz -- paranoid?
 	r_visframecount = 0; //johnfitz -- paranoid?
