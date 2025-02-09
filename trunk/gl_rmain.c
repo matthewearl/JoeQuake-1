@@ -1947,6 +1947,56 @@ void R_DrawEntBbox(entity_t *ent)
 #define SHADOW_HEIGHT 0.1 //how far above the floor to render the shadow
 //johnfitz
 
+
+static void DrawCross(vec3_t origin)
+{
+	float line_length = 8;
+	float diag_line_length = line_length / sqrt(3);
+
+	glColor4f(0, 0, 0, 1);
+	glCullFace(GL_FRONT);
+	glPolygonMode(GL_BACK, GL_LINE);
+	glLineWidth(3);
+	glEnable(GL_LINE_SMOOTH);
+	GL_PolygonOffset(-0.7);
+	glDisable(GL_TEXTURE_2D);
+
+	glPushMatrix();
+	glTranslatef(origin[0], origin[1], origin[2]);
+	glBegin(GL_LINES);
+
+	glVertex3f(-line_length, 0.0f, 0.0f);
+	glVertex3f(line_length, 0.0f, 0.0f);
+
+	glVertex3f(0.0f, -line_length, 0.0f);
+	glVertex3f(0.0f, line_length, 0.0f);
+
+	glVertex3f(0.0f, 0.0f, -line_length);
+	glVertex3f(0.0f, 0.0f, line_length);
+
+	glVertex3f(-diag_line_length, -diag_line_length, -diag_line_length);
+	glVertex3f(diag_line_length, diag_line_length, diag_line_length);
+
+	glVertex3f(-diag_line_length, diag_line_length, -diag_line_length);
+	glVertex3f(diag_line_length, -diag_line_length, diag_line_length);
+
+	glVertex3f(diag_line_length, -diag_line_length, -diag_line_length);
+	glVertex3f(-diag_line_length, diag_line_length, diag_line_length);
+
+	glVertex3f(diag_line_length, diag_line_length, -diag_line_length);
+	glVertex3f(-diag_line_length, -diag_line_length, diag_line_length);
+
+	glEnd();
+	glPopMatrix();
+
+	glColor4f(1, 1, 1, 1);
+	GL_PolygonOffset(0);
+	glPolygonMode(GL_BACK, GL_FILL);
+	glDisable(GL_LINE_SMOOTH);
+	glCullFace(GL_BACK);
+	glEnable(GL_TEXTURE_2D);
+}
+
 /*
 =================
 R_DrawAliasModel
@@ -1962,6 +2012,11 @@ void R_DrawAliasModel (entity_t *ent)
 	qboolean	islumaskin, alphatest = !!(ent->model->flags & MF_HOLEY);
 	float		scalefactor = 1.0f;
 
+	if (r_draw_hull.value)
+	{
+		DrawCross(ent->origin);
+		return;
+	}
 	VectorAdd (ent->origin, clmodel->mins, mins);	//joe: used only for shadows now
 
 	// If cl_bbox is enabled apply dead body filter here.
