@@ -119,6 +119,7 @@ cvar_t	r_skyfog_default = { "r_skyfog_default", "0.5" };
 cvar_t	r_scale = { "r_scale", "1" };
 qboolean OnChange_r_ambient(cvar_t *var, char *string);
 cvar_t	r_ambient = { "r_ambient", "0", 0, OnChange_r_ambient };
+cvar_t	r_draw_hull = {"r_draw_hull", "0"};
 
 cvar_t	gl_clear = {"gl_clear", "1"};
 cvar_t	gl_cull = {"gl_cull", "1"};
@@ -4050,6 +4051,7 @@ void R_Init (void)
 	Cvar_Register (&r_waterquality);
 	Cvar_Register (&r_oldwater);
 	Cvar_Register (&r_waterwarp);
+	Cvar_Register (&r_draw_hull);
 
 	Cvar_Register (&gl_finish);
 	Cvar_Register (&gl_clear);
