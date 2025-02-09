@@ -740,7 +740,8 @@ qboolean CL_ShowBBoxes(void)
 {
 	qboolean demo_bbox = (cl_bbox.value == CL_BBOX_MODE_ON || cl_bbox.value == CL_BBOX_MODE_DEMO);
 	qboolean live_bbox = (cl_bbox.value == CL_BBOX_MODE_ON || cl_bbox.value == CL_BBOX_MODE_LIVE);
-	return ((demo_bbox && cls.demoplayback) || (live_bbox && !cls.demoplayback)) && !cls.demorecording;
+	return ((demo_bbox && cls.demoplayback) || (live_bbox && !cls.demoplayback))
+			&& !r_draw_hull.value && !cls.demorecording;
 }
 
 
