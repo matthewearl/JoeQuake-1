@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // cl_parse.c -- parse a message received from the server
 
 #include "quakedef.h"
+#include "bgmusic.h"
 
 char *svc_strings[] =
 {
@@ -1499,9 +1500,19 @@ void CL_ParseServerMessage (void)
 
 		case svc_setpause:
 			if ((cl.paused = MSG_ReadByte()))
+			{
 				CDAudio_Pause ();
+#ifndef _WIN32
+				BGM_Pause ();
+#endif
+			}
 			else
+			{
 				CDAudio_Resume ();
+#ifndef _WIN32
+				BGM_Resume ();
+#endif
+			}
 			break;
 
 		case svc_signonnum:
@@ -1555,9 +1566,19 @@ void CL_ParseServerMessage (void)
 			else
 			{
 				if ((cls.demoplayback || cls.demorecording) && (cls.forcetrack != -1))
-					CDAudio_Play((byte)cls.forcetrack, true);
+				{
+					CDAudio_Play ((byte)cls.forcetrack, true);
+#ifndef _WIN32
+					BGM_PlayCDtrack ((byte)cls.forcetrack, true);
+#endif
+				}
 				else
-					CDAudio_Play((byte)cl.cdtrack, true);
+				{
+					CDAudio_Play ((byte)cl.cdtrack, true);
+#ifndef _WIN32
+					BGM_PlayCDtrack ((byte)cl.cdtrack, true);
+#endif
+				}
 			}
 			break;
 

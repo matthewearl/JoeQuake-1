@@ -330,18 +330,11 @@ void CDAudio_Update (void)
 
 	if (bgmvolume.value != cdvolume)
 	{
-		if (cdvolume)
-		{
-			Cvar_SetValue (&bgmvolume, 0.0);
-			cdvolume = bgmvolume.value;
+		cdvolume = bgmvolume.value;
+		if (!cdvolume)
 			CDAudio_Pause ();
-		}
 		else
-		{
-			Cvar_SetValue (&bgmvolume, 1.0);
-			cdvolume = bgmvolume.value;
 			CDAudio_Resume ();
-		}
 	}
 
 	if (playing && lastchk < time(NULL))
@@ -382,6 +375,7 @@ int CDAudio_Init (void)
 	if ((cdfile = open(cd_dev, O_RDONLY)) == -1)
 	{
 		Con_Printf ("CDAudio_Init: open of \"%s\" failed (%i)\n", cd_dev, errno);
+		enabled = false;
 		cdfile = -1;
 		return -1;
 	}

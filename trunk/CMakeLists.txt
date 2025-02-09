@@ -3,7 +3,7 @@ set(CMAKE_C_STANDARD 99)
 find_package(SDL2 REQUIRED)
 
 if (SDL2_FOUND)
-  include_directories(${SDL2_INCLUDE_DIRS})
+    include_directories(${SDL2_INCLUDE_DIRS})
 endif()
 
 add_library(joequake_minizip
@@ -21,6 +21,8 @@ target_link_libraries(joequake_minizip
 
 add_executable(joequake-gl
     anorm_dots.h
+    bgmusic.c
+    bgmusic.h
     bspfile.h
     cdaudio.h
     cd_linux.c
@@ -109,10 +111,18 @@ add_executable(joequake-gl
     security.c
     security.h
     server.h
+    snd_codec.c
+    snd_codec.h
+    snd_codeci.h
     snd_dma.c
     snd_sdl.c
     snd_mem.c
     snd_mix.c
+    snd_mp3.c
+    snd_mp3.h
+    snd_mp3tag.c
+    snd_vorbis.c
+    snd_vorbis.h
     sound.h
     spritegn.h
     sv_main.c
@@ -148,8 +158,8 @@ add_executable(joequake-gl
 )
 
 target_compile_definitions(joequake-gl
-    PRIVATE GLQUAKE SDL2
+    PRIVATE GLQUAKE SDL2 USE_CODEC_VORBIS USE_CODEC_MP3
 )
 target_link_libraries(joequake-gl
-    PRIVATE joequake_minizip png jpeg GL m dl ${SDL2_LIBRARIES}
+    PRIVATE joequake_minizip png jpeg GL m dl vorbisfile vorbis ogg mad ${SDL2_LIBRARIES}
 )

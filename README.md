@@ -3,16 +3,17 @@
 This is a fork of
 [Joe's JoeQuake repository](https://github.com/j0zzz/JoeQuake), the speedrunning
 focused Quake engine.  It adds files to allow building the SDL version of
-JoeQuake on Linux.  To build first install dependencies:
+JoeQuake on Linux. The BGM system is also changed to use vorbis/mad to play vorbis/mp3
+music, instead of FMOD. To build first install dependencies:
 
 ```bash
 # For Ubuntu users
 sudo apt-get update
-sudo apt-get install cmake build-essential libz-dev libsdl2-dev libjpeg-dev libgl1-mesa-dev libpng-dev
+sudo apt-get install cmake build-essential libz-dev libsdl2-dev libjpeg-dev libgl1-mesa-dev libpng-dev libmad0-dev libvorbis-dev
 ```
 ```bash
 # For Arch users
-sudo pacman -Syu base-devel cmake zlib sdl2 libjpeg-turbo mesa libpng
+sudo pacman -Syu base-devel cmake zlib sdl2 libjpeg-turbo mesa libpng libmad libvorbis
 ```
 
 ...and then run the following from the repository root:
@@ -82,6 +83,7 @@ You may freely redistribute or modify JoeQuake as you wish.
 * Jozsef Szalontai - lead programmer
 * Sphere - server/client bugfixes, several QoL improvements
 * Matthew Earl - entire ghost recording feature, SDL port
+* Karol Urbański - vorbis/mp3 support on Linux (from ironwail)
 
 ### Authors whose code was re-used in JoeQuake
 
