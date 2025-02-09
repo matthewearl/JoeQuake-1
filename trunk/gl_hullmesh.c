@@ -7,7 +7,6 @@ static const GLuint position_attr = 0;
 static const GLuint normal_attr = 1;
 static GLuint hull_program = 0;
 static GLuint is_line_loc;
-static GLuint refdef_origin_loc;
 
 static void checkGlError (void)
 {
@@ -33,6 +32,7 @@ void GlHullMesh_CreateShaders (void)
 		"attribute vec3 normal;\n"
 		"\n"
 		"varying vec3 frag_normal;\n"
+		"varying vec3 frag_normal_c;\n"
 		"\n"
 		"out vec3 interp_position;\n"
 		"\n"
@@ -40,23 +40,24 @@ void GlHullMesh_CreateShaders (void)
 		"    gl_Position = gl_ModelViewProjectionMatrix * vec4(position, 1.0);\n"
 		"    gl_Position.z -= 5e-2 * is_line;"
 		"    frag_normal = normal;\n"
-		"    interp_position = position;\n"
+		"    frag_normal_c = (gl_ModelViewMatrix * vec4(normal, 0.0)).xyz;\n"
+		"    interp_position = (gl_ModelViewMatrix * vec4(position, 1.0)).xyz;\n"
 		"}\n";
 
 	const GLchar *frag_source =
 		"#version 130\n"
 		"\n"
 		"uniform int is_line;\n"
-		"uniform vec3 refdef_origin;\n"
 		"\n"
 		"varying vec3 frag_normal;\n"
+		"varying vec3 frag_normal_c;\n"
 		"\n"
 		"in vec3 interp_position;\n"
 		"\n"
 		"void main() {\n"
 		"    vec3 color = frag_normal * 0.25 + 0.75;\n"
-		"    vec3 light_dir = normalize(refdef_origin - interp_position);\n"
-		"    color *= 0.25 + 0.75 * dot(light_dir, frag_normal);\n"
+		"    vec3 light_dir = normalize(-interp_position);\n"
+		"    color *= 0.25 + 0.75 * dot(light_dir, frag_normal_c);\n"
 		"    gl_FragColor = vec4(color * (1 - is_line), 1.0 - 0.8 * is_line);\n"
 		"}\n";
 
@@ -66,7 +67,6 @@ void GlHullMesh_CreateShaders (void)
 		Sys_Error("Could not compile program");
 
 	is_line_loc = GL_GetUniformLocation(&hull_program, "is_line");
-	refdef_origin_loc = GL_GetUniformLocation(&hull_program, "refdef_origin");
 }
 
 void GlHullMesh_BuildVertexBuffer (void)
@@ -126,7 +126,6 @@ void GlHullMesh_Render (model_t *model)
 	GL_BindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
 	
 	qglUniform1i(is_line_loc, 0);
-	qglUniform3fv(refdef_origin_loc, 1, r_refdef.vieworg);
 	glDrawElements(GL_TRIANGLES, model->hullmesh_count, GL_UNSIGNED_INT,
 					(void *)(sizeof(int) * model->hullmesh_start));
 
