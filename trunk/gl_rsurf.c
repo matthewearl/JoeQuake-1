@@ -2027,7 +2027,7 @@ void R_DrawTextureChains(model_t *model, entity_t *ent, texchain_t chain)
 {
 	float entalpha;
 
-	if (model->hullmesh_start != -1)
+	if (r_draw_hull.value && model->hullmesh_start != -1)
 	{
 		GlHullMesh_Render(model);
 		return;
