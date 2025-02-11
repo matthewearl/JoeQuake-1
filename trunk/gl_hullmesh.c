@@ -191,13 +191,21 @@ static void SetupFaces (GLuint vbo, GLuint ibo)
 static void SetupEdges (void)
 {
 	qglUniform1i(is_line_loc, 1);
+
 	glEnable(GL_BLEND);
+	glPolygonMode(GL_BACK, GL_LINE);
+	glLineWidth(1.0);
+	glEnable(GL_LINE_SMOOTH);
+	glDisable(GL_TEXTURE_2D);
 }
 
 static void FinishDraw (void)
 {
 	glDisable(GL_BLEND);
 	glDisable(GL_LINE_SMOOTH);
+	glEnable(GL_TEXTURE_2D);
+	glPolygonMode(GL_BACK, GL_FILL);
+	glDisable(GL_BLEND);
 
 	qglDisableVertexAttribArray(normal_attr);
 	qglDisableVertexAttribArray(position_attr);
