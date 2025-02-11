@@ -85,7 +85,7 @@ void GlHullMesh_BuildVertexBuffer (void)
 	// Move the vertices into a vertex buffer.
 	qglDeleteBuffers(1, &vbo);
 	qglGenBuffers(1, &vbo);
-	qglBindBuffer(GL_ARRAY_BUFFER, vbo);
+	GL_BindBuffer(GL_ARRAY_BUFFER, vbo);
 	qglBufferData(GL_ARRAY_BUFFER,
 					sizeof(hull_vertex_t) * num_vertices,
 					vertices,
@@ -95,7 +95,7 @@ void GlHullMesh_BuildVertexBuffer (void)
 	// Move the indices into an index buffer.
 	qglDeleteBuffers(1, &ibo);
 	qglGenBuffers(1, &ibo);
-	qglBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
+	GL_BindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo);
 	qglBufferData(GL_ELEMENT_ARRAY_BUFFER,
 					sizeof(int) * num_indices,
 					indices,
