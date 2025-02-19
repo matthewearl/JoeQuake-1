@@ -23,6 +23,8 @@ typedef struct node_s
 // information for leafs
 	int				contents;		// leaf nodes (0 for decision nodes)
 	struct portal_s	*portals;
+
+	struct node_s *parent;
 } node_t;
 
 typedef struct portal_s
@@ -517,7 +519,7 @@ CutNodePortals_r
 static void CutNodePortals_r (node_t *node)
 {
 	mplane_t 	*plane, clipplane;
-	node_t		*f, *b, *other_node;
+	node_t		*f, *b, *other_node, *ancestor;
 	portal_t	*p, *new_portal, *next_portal;
 	winding_t	*w, *frontwinding, *backwinding;
 	int			side;
@@ -545,20 +547,14 @@ static void CutNodePortals_r (node_t *node)
 	new_portal->plane = node->plane;
 	
 	w = BaseWindingForPlane (node->plane);
-	side = 0;	// shut up compiler warning
-	for (p = node->portals ; p ; p = p->next[side])	
+	for (ancestor = node; ancestor->parent ; ancestor = ancestor->parent)	
 	{
-		clipplane = *p->plane;
-		if (p->nodes[0] == node)
-			side = 0;
-		else if (p->nodes[1] == node)
+		clipplane = *ancestor->parent->plane;
+		if (ancestor->parent->children[1] == ancestor)
 		{
 			clipplane.dist = -clipplane.dist;
 			VectorSubtract (vec3_origin, clipplane.normal, clipplane.normal);
-			side = 1;
 		}
-		else
-			Sys_Error ("CutNodePortals_r: mislinked portal");
 
 		w = ClipWinding (w, &clipplane, true);
 		if (!w)
@@ -690,8 +686,11 @@ static node_t *ConvertNodes (hull_t *hull, int idx)
 		node->plane = &hull->planes[clipnode->planenum];
 		node->contents = 0;
 		for (child_idx = 0; child_idx < 2; child_idx++)
+		{
 			node->children[child_idx] = ConvertNodes(hull,
 													 clipnode->children[child_idx]);
+			node->children[child_idx]->parent = node;
+		}
 	} else {
 		node->contents = idx;
 		for (child_idx = 0; child_idx < 2; child_idx++)
