@@ -633,6 +633,6 @@ void HullMesh_MakeVertexArray (int hull_idx,
 							   int *num_indices);
 void GlHullMesh_CreateShaders (void);
 void GlHullMesh_BuildVertexBuffer (void);
-void GlHullMesh_Render (model_t *model);
+void GlHullMesh_DrawEntity (entity_t *ent);
 
 #endif	// __MODEL__

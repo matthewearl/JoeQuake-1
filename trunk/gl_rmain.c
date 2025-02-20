@@ -189,15 +189,6 @@ typedef struct
 	int frame_max;
 } frame_range_t;
 
-typedef enum
-{
-	BBOX_CAT_MISC,
-	BBOX_CAT_MONSTER,
-	BBOX_CAT_PICKUP,
-
-	NUM_BBOX_CAT
-} bbox_cat_t;
-
 typedef struct
 {
 	modelindex_t mi;
@@ -1905,10 +1896,10 @@ static void R_DrawBbox(vec3_t origin, vec3_t mins, vec3_t maxs, vec3_t color)
 	glCullFace(GL_BACK);
 }
 
-void R_DrawEntBbox(entity_t *ent)
+qboolean R_BboxForEnt(entity_t *ent, vec3_t mins, vec3_t maxs,
+					  bbox_cat_t *bbox_cat)
 {
-	vec3_t color = {1, 1, 1};
-	float *origin;
+	qboolean has_bbox = false;;
 	frame_range_t *range;
 	id1_bbox_t *bbox_info;
 
@@ -1924,21 +1915,40 @@ void R_DrawEntBbox(entity_t *ent)
 
 		if (range->frame_max == 0)
 		{
-			if (gl_interpolate_moves.value)
-				origin = ent->origin;
-			else
-				origin = ent->msg_origins[0];
-
-			if (cl_bboxcolors.value)
-				VectorCopy(bbox_colors[bbox_info->bbox_cat], color);
-			if (VectorLength(bbox_info->mins) < 1e-2
-					&& VectorLength(bbox_info->maxs) < 1e-2)
-				R_DrawCross(origin, color);
-			else
-				R_DrawBbox(origin, bbox_info->mins, bbox_info->maxs, color);
+			*bbox_cat = bbox_info->bbox_cat;
+			VectorCopy(bbox_info->mins, mins);
+			VectorCopy(bbox_info->maxs, maxs);
+			has_bbox = true;
 		}
 	}
+
+	return has_bbox;
 }
+
+void R_DrawEntBbox(entity_t *ent)
+{
+	vec3_t color = {1, 1, 1};
+	bbox_cat_t bbox_cat;
+	vec3_t mins, maxs;
+	float *origin;
+
+	if (R_BboxForEnt(ent, mins, maxs, &bbox_cat))
+	{
+		if (gl_interpolate_moves.value)
+			origin = ent->origin;
+		else
+			origin = ent->msg_origins[0];
+		if (cl_bboxcolors.value)
+			VectorCopy(bbox_colors[bbox_cat], color);
+		if (VectorLength(mins) < 1e-2
+				&& VectorLength(maxs) < 1e-2)
+			R_DrawCross(origin, color);
+		else
+			R_DrawBbox(origin, mins, maxs, color);
+		R_DrawBbox(origin, mins, maxs, color);
+	}
+}
+
 
 //johnfitz -- values for shadow matrix
 #define SHADOW_SKEW_X -0.7 //skew along x axis. -0.7 to mimic glquake shadows
@@ -1947,55 +1957,6 @@ void R_DrawEntBbox(entity_t *ent)
 #define SHADOW_HEIGHT 0.1 //how far above the floor to render the shadow
 //johnfitz
 
-
-static void DrawCross(vec3_t origin)
-{
-	float line_length = 8;
-	float diag_line_length = line_length / sqrt(3);
-
-	glColor4f(0, 0, 0, 1);
-	glCullFace(GL_FRONT);
-	glPolygonMode(GL_BACK, GL_LINE);
-	glLineWidth(3);
-	glEnable(GL_LINE_SMOOTH);
-	GL_PolygonOffset(-0.7);
-	glDisable(GL_TEXTURE_2D);
-
-	glPushMatrix();
-	glTranslatef(origin[0], origin[1], origin[2]);
-	glBegin(GL_LINES);
-
-	glVertex3f(-line_length, 0.0f, 0.0f);
-	glVertex3f(line_length, 0.0f, 0.0f);
-
-	glVertex3f(0.0f, -line_length, 0.0f);
-	glVertex3f(0.0f, line_length, 0.0f);
-
-	glVertex3f(0.0f, 0.0f, -line_length);
-	glVertex3f(0.0f, 0.0f, line_length);
-
-	glVertex3f(-diag_line_length, -diag_line_length, -diag_line_length);
-	glVertex3f(diag_line_length, diag_line_length, diag_line_length);
-
-	glVertex3f(-diag_line_length, diag_line_length, -diag_line_length);
-	glVertex3f(diag_line_length, -diag_line_length, diag_line_length);
-
-	glVertex3f(diag_line_length, -diag_line_length, -diag_line_length);
-	glVertex3f(-diag_line_length, diag_line_length, diag_line_length);
-
-	glVertex3f(diag_line_length, diag_line_length, -diag_line_length);
-	glVertex3f(-diag_line_length, -diag_line_length, diag_line_length);
-
-	glEnd();
-	glPopMatrix();
-
-	glColor4f(1, 1, 1, 1);
-	GL_PolygonOffset(0);
-	glPolygonMode(GL_BACK, GL_FILL);
-	glDisable(GL_LINE_SMOOTH);
-	glCullFace(GL_BACK);
-	glEnable(GL_TEXTURE_2D);
-}
 
 /*
 =================
@@ -2012,11 +1973,6 @@ void R_DrawAliasModel (entity_t *ent)
 	qboolean	islumaskin, alphatest = !!(ent->model->flags & MF_HOLEY);
 	float		scalefactor = 1.0f;
 
-	if (r_draw_hull.value)
-	{
-		DrawCross(ent->origin);
-		return;
-	}
 	VectorAdd (ent->origin, clmodel->mins, mins);	//joe: used only for shadows now
 
 	// If cl_bbox is enabled apply dead body filter here.
@@ -3545,6 +3501,12 @@ void R_DrawEntitiesOnList ()
 	for (i = 0 ; i < cl_numvisedicts ; i++)
 	{
 		currententity = cl_visedicts[i];
+
+		if (r_draw_hull.value)
+		{
+			GlHullMesh_DrawEntity(currententity);
+			continue;
+		}
 
 		if (qmb_initialized && SetFlameModelState() == -1)
 			continue;

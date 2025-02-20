@@ -145,6 +145,15 @@ typedef struct
 	int		ambientlight;
 } refdef_t;
 
+typedef enum
+{
+	BBOX_CAT_MISC,
+	BBOX_CAT_MONSTER,
+	BBOX_CAT_PICKUP,
+
+	NUM_BBOX_CAT
+} bbox_cat_t;
+
 // refresh
 extern	refdef_t	r_refdef;
 extern	vec3_t		r_origin, vpn, vright, vup;
@@ -163,6 +172,9 @@ void R_AddEfrags (entity_t *ent);
 void R_CheckEfrags(void); //johnfitz
 
 void R_NewMap(void);
+qboolean R_BboxForEnt(entity_t *ent, vec3_t mins, vec3_t maxs, bbox_cat_t *bbox_cat);
+void R_DrawEntBbox(entity_t *ent);
+void R_DrawAliasModel (entity_t *ent);
 
 // particles
 
