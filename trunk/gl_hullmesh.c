@@ -61,6 +61,7 @@ static const GLuint position_attr = 0;
 static const GLuint normal_attr = 1;
 static GLuint hull_program = 0;
 static GLuint is_line_loc;
+static GLuint prescale_loc;
 
 static void checkGlError (void)
 {
@@ -81,6 +82,7 @@ void GlHullMesh_CreateShaders (void)
 		"#version 130\n"
 		"\n"
 		"uniform int is_line;\n"
+		"uniform vec3 prescale;\n"
 		"\n"
 		"attribute vec3 position;\n"
 		"attribute vec3 normal;\n"
@@ -91,11 +93,11 @@ void GlHullMesh_CreateShaders (void)
 		"out vec3 interp_position;\n"
 		"\n"
 		"void main() {\n"
-		"    gl_Position = gl_ModelViewProjectionMatrix * vec4(position, 1.0);\n"
+		"    gl_Position = gl_ModelViewProjectionMatrix * vec4(prescale * position, 1.0);\n"
 		"    gl_Position.z -= 5e-2 * is_line;"
 		"    frag_normal = normal;\n"
 		"    frag_normal_c = (gl_ModelViewMatrix * vec4(normal, 0.0)).xyz;\n"
-		"    interp_position = (gl_ModelViewMatrix * vec4(position, 1.0)).xyz;\n"
+		"    interp_position = (gl_ModelViewMatrix * vec4(prescale * position, 1.0)).xyz;\n"
 		"}\n";
 
 	const GLchar *frag_source =
@@ -121,6 +123,7 @@ void GlHullMesh_CreateShaders (void)
 		Sys_Error("Could not compile program");
 
 	is_line_loc = GL_GetUniformLocation(&hull_program, "is_line");
+	prescale_loc = GL_GetUniformLocation(&hull_program, "prescale");
 }
 
 static void LoadBufferData(
@@ -207,6 +210,7 @@ static void FinishDraw (void)
 static void DrawBrushModel (model_t *model)
 {
 	SetupFaces(hull_vbo, hull_ibo);
+	qglUniform3f(prescale_loc, 1., 1., 1.);
 	glDrawElements(GL_TRIANGLES, model->hullmesh_count, GL_UNSIGNED_INT,
 					(void *)(sizeof(int) * model->hullmesh_start));
 	SetupEdges();
@@ -271,9 +275,9 @@ static void DrawBox(vec3_t mins, vec3_t maxs)
 
 	glPushMatrix();
 	glTranslatef(mins[0], mins[1], mins[2]);
-	glScalef(scale[0], scale[1], scale[2]);
 
 	SetupFaces(cube_vbo, cube_ibo);
+	qglUniform3f(prescale_loc, scale[0], scale[1], scale[2]);
 	glDrawElements(GL_QUADS, 24, GL_UNSIGNED_INT, (void *)0);
 	SetupEdges();
 	glDrawElements(GL_LINES, 48, GL_UNSIGNED_INT, (void *)(sizeof(int) * 24));
