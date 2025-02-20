@@ -2027,12 +2027,6 @@ void R_DrawTextureChains(model_t *model, entity_t *ent, texchain_t chain)
 {
 	float entalpha;
 
-	if (r_draw_hull.value && model->hullmesh_start != -1)
-	{
-		GlHullMesh_Render(model);
-		return;
-	}
-
 	entalpha = (ent != NULL) ? ent->transparency : 1.0f;
 	
 	R_UploadLightmaps();
@@ -2198,10 +2192,16 @@ void R_DrawWorld (void)
 	currententity = &ent;
 	currenttexture = -1;
 
-	R_DrawSky();
-
 	// draw the world
-	R_DrawTextureChains (cl.worldmodel, NULL, chain_world);
+	if (r_draw_hull.value)
+	{
+		GlHullMesh_DrawEntity(currententity);
+	}
+	else
+	{
+		R_DrawSky();
+		R_DrawTextureChains (cl.worldmodel, NULL, chain_world);
+	}
 }
 
 /*

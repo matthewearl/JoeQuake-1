@@ -340,6 +340,9 @@ model_t *Mod_LoadModel (model_t *mod, qboolean crash)
 // call the apropriate loader
 	mod->needload = false;
 
+	mod->hullmesh_start = -1;
+	mod->hullmesh_count = -1;
+
 	switch (LittleLong(*(unsigned *)buf))
 	{
 		case IDPOLYHEADER:
@@ -2053,10 +2056,6 @@ void Mod_LoadBrushModel (model_t *mod, void *buffer)
 			mod = loadmodel;
 		}
 	}
-
-	// Loaded later on.
-	mod->hullmesh_start = -1;
-	mod->hullmesh_count = -1;
 }
 
 /*

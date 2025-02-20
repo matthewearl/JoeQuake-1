@@ -464,8 +464,6 @@ void Ghost_Load (void)
     Ghost_PrintLevelLoadInfo();
 }
 
-void R_DrawAliasModel (entity_t *ent);
-void R_DrawEntBbox(entity_t *ent);
 void Ghost_Draw (void)
 {
     if (Ghost_SetForLevel()) {
