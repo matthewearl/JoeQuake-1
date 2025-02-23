@@ -522,7 +522,7 @@ static void CutNodePortals_r (node_t *node)
 	node_t		*f, *b, *other_node, *ancestor;
 	portal_t	*p, *new_portal, *next_portal;
 	winding_t	*w, *frontwinding, *backwinding;
-	int			side;
+	int			i, side;
 
 //	CheckLeafPortalConsistancy (node);
 
@@ -562,6 +562,12 @@ static void CutNodePortals_r (node_t *node)
 			printf ("WARNING: CutNodePortals_r:new portal was clipped away\n");
 			break;
 		}
+	}
+	for (i = 0; w && i < 6; i++)
+	{
+		w = ClipWinding (w, &new_planes[i], true);
+		if (!w)
+			printf ("WARNING: CutNodePortals_r:new portal was clipped away\n");
 	}
 	
 	if (w)
