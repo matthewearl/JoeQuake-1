@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // cl_parse.c -- parse a message received from the server
 
 #include "quakedef.h"
+#include "bgmusic.h"
 
 char *svc_strings[] =
 {
@@ -194,6 +195,12 @@ void CL_InitModelnames (void)
 	cl_modelnames[mi_i_end4] = "progs/end4.mdl";
 	cl_modelnames[mi_i_backpack] = "progs/backpack.mdl";
 	cl_modelnames[mi_explobox] = "maps/b_explob.bsp";
+	cl_modelnames[mi_k_spike] = "progs/k_spike.mdl";
+	cl_modelnames[mi_s_spike] = "progs/s_spike.mdl";
+	cl_modelnames[mi_v_spike] = "progs/v_spike.mdl";
+	cl_modelnames[mi_w_spike] = "progs/w_spike.mdl";
+	cl_modelnames[mi_laser] = "progs/laser.mdl";
+	cl_modelnames[mi_spike] = "progs/spike.mdl";
 
 	for (i = 0 ; i < NUM_MODELINDEX ; i++)
 	{
@@ -1499,9 +1506,15 @@ void CL_ParseServerMessage (void)
 
 		case svc_setpause:
 			if ((cl.paused = MSG_ReadByte()))
+			{
 				CDAudio_Pause ();
+				BGM_Pause ();
+			}
 			else
+			{
 				CDAudio_Resume ();
+				BGM_Resume ();
+			}
 			break;
 
 		case svc_signonnum:
@@ -1550,14 +1563,16 @@ void CL_ParseServerMessage (void)
 		case svc_cdtrack:
 			cl.cdtrack = MSG_ReadByte ();
 			cl.looptrack = MSG_ReadByte ();
-			if (fmod_loaded)
-				FMOD_PlayTrack(cl.cdtrack);
+
+			if ((cls.demoplayback || cls.demorecording) && (cls.forcetrack != -1))
+			{
+				CDAudio_Play ((byte)cls.forcetrack, true);
+				BGM_PlayCDtrack ((byte)cls.forcetrack, true);
+			}
 			else
 			{
-				if ((cls.demoplayback || cls.demorecording) && (cls.forcetrack != -1))
-					CDAudio_Play((byte)cls.forcetrack, true);
-				else
-					CDAudio_Play((byte)cl.cdtrack, true);
+				CDAudio_Play ((byte)cl.cdtrack, true);
+				BGM_PlayCDtrack ((byte)cl.cdtrack, true);
 			}
 			break;
 
