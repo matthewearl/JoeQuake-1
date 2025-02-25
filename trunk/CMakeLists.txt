@@ -25,7 +25,7 @@ add_executable(joequake-gl
     bgmusic.h
     bspfile.h
     cdaudio.h
-    cd_linux.c
+    cd_null.c
     chase.c
     client.h
     cl_demo.c
