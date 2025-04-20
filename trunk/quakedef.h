@@ -260,6 +260,7 @@ typedef struct
 #include "iplog.h"
 #include "cl_slist.h"
 #include "ghost/ghost.h"
+#include "pathtracer/pathtracer.h" // uses Ghost
 
 //=============================================================================
 
