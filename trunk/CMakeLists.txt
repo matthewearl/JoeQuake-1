@@ -152,6 +152,8 @@ add_executable(joequake-gl
     ghost/ghostparse.c
     ghost/demosummary.c
     ghost/demosummary.h
+    pathtracer/pathtracer.h
+    pathtracer/pathtracer.c
 )
 
 target_compile_definitions(joequake-gl
