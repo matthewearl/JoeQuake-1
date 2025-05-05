@@ -323,6 +323,8 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='GL Release|Win32'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='Direct3D Release|Win32'">true</ExcludedFromBuild>
     </ClCompile>
+    <ClCompile Include="..\..\trunk\hullmesh.c" />
+    <ClCompile Include="..\..\trunk\gl_hullmesh.c" />
     <ClCompile Include="..\..\trunk\cl_dzip.c" />
     <ClCompile Include="..\..\trunk\demoseekparse.c" />
     <ClCompile Include="..\..\trunk\demoparse.c" />
