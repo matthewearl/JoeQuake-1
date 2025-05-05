@@ -346,7 +346,8 @@ static winding_t *NewWinding (int points)
 	if (points > MAX_POINTS_ON_WINDING)
 		Sys_Error ("NewWinding: %i points", points);
 	
-	size = (int)((void *)((winding_t *)0)->points[points] - (void *)0);
+	size = (int)((char *)&((winding_t *)0)->points[points] - (char *)0);
+
 	w = malloc (size);
 	memset (w, 0, size);
 	
@@ -830,9 +831,9 @@ static void WriteFaceLines (portal_t *p, winding_t *w, qboolean flipped, void *c
 	wfctx->num_vertices += w->numpoints;
 }
 
-static node_t *PortalizeSubModel (model_t *model, int hull_idx,
-								  node_t **root_node,
-								  node_t **outside_node)
+static void PortalizeSubModel (model_t *model, int hull_idx,
+							   node_t **root_node,
+							   node_t **outside_node)
 {
 	*root_node = ConvertNodes(&model->hulls[hull_idx],
 								model->hulls[hull_idx].firstclipnode);
