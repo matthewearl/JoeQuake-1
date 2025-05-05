@@ -943,9 +943,6 @@ void SCR_BeginLoadingPlaque (void)
 {
 	S_StopAllSounds (true);
 
-	if (streamplaying)
-		FMOD_Stop_Stream_f();
-
 	if (cls.state != ca_connected || cls.signon != SIGNONS)
 		return;
 
@@ -1252,6 +1249,7 @@ void SCR_UpdateScreen (void)
 		SCR_DrawClock ();
 		SCR_DrawFPS ();
 		SCR_DrawSpeed ();
+		PathTracer_Sample_Each_Frame ();
 		Ghost_DrawGhostTime (false);
 		SCR_DrawStats ();
 		SCR_DrawVolume ();

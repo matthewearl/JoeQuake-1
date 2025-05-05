@@ -113,6 +113,12 @@
     <Filter Include="Header Files\Ghost_h">
       <UniqueIdentifier>{93535a27-753e-43e4-983d-0bc3e222b987}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\PathTracer">
+      <UniqueIdentifier>{4672d0cc-286d-45b5-ad76-38fa09220d1d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\PathTracer_h">
+      <UniqueIdentifier>{1f65504b-d25b-4450-859c-fc6ce54bc199}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="..\joequake.rc">
@@ -408,17 +414,11 @@
     <ClCompile Include="..\..\trunk\gl_fog.c">
       <Filter>Source Files\OpenGL</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\trunk\fmod.c">
-      <Filter>Source Files\Sound</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\trunk\ioapi.c">
       <Filter>Source Files\Unzip</Filter>
     </ClCompile>
     <ClCompile Include="..\..\trunk\unzip.c">
       <Filter>Source Files\Unzip</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\trunk\ghost\demoparse.c">
-      <Filter>Source Files\Ghost</Filter>
     </ClCompile>
     <ClCompile Include="..\..\trunk\ghost\ghost.c">
       <Filter>Source Files\Ghost</Filter>
@@ -443,6 +443,36 @@
     </ClCompile>
     <ClCompile Include="..\..\trunk\ghost\demosummary.c">
       <Filter>Source Files\Ghost</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\trunk\demoseekparse.c">
+      <Filter>Source Files\Client</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\trunk\demoparse.c">
+      <Filter>Source Files\Client</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\trunk\cl_demoui.c">
+      <Filter>Source Files\Client</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\trunk\democam.c">
+      <Filter>Source Files\Client</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\trunk\bgmusic.c">
+      <Filter>Source Files\Sound</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\trunk\snd_codec.c">
+      <Filter>Source Files\Sound</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\trunk\snd_mp3.c">
+      <Filter>Source Files\Sound</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\trunk\snd_mp3tag.c">
+      <Filter>Source Files\Sound</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\trunk\snd_vorbis.c">
+      <Filter>Source Files\Sound</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\trunk\pathtracer\pathtracer.c">
+      <Filter>Source Files\PathTracer</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -623,9 +653,6 @@
     <ClInclude Include="..\..\trunk\gl_warp_sin.h">
       <Filter>Header Files\OpenGL_h</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\trunk\ghost\demoparse.h">
-      <Filter>Header Files\Ghost_h</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\trunk\ghost\ghost.h">
       <Filter>Header Files\Ghost_h</Filter>
     </ClInclude>
@@ -634,6 +661,27 @@
     </ClInclude>
     <ClInclude Include="..\..\trunk\ghost\demosummary.h">
       <Filter>Header Files\Ghost_h</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\trunk\demoparse.h">
+      <Filter>Header Files\Client_h</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\trunk\bgmusic.h">
+      <Filter>Header Files\Sound_h</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\trunk\snd_codec.h">
+      <Filter>Header Files\Sound_h</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\trunk\snd_codeci.h">
+      <Filter>Header Files\Sound_h</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\trunk\snd_mp3.h">
+      <Filter>Header Files\Sound_h</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\trunk\snd_vorbis.h">
+      <Filter>Header Files\Sound_h</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\trunk\pathtracer\pathtracer.h">
+      <Filter>Header Files\PathTracer_h</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

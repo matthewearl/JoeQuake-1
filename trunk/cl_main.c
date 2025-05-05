@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // cl_main.c -- client main loop
 
 #include "quakedef.h"
+#include "bgmusic.h"
 
 // we need to declare some mouse variables here, because the menu system
 // references them even when on a unix system.
@@ -58,6 +59,7 @@ cvar_t	cl_bobbing = {"cl_bobbing", "0"};
 cvar_t	cl_deadbodyfilter = {"cl_deadbodyfilter", "0"};
 cvar_t	cl_gibfilter = {"cl_gibfilter", "0"};
 cvar_t	cl_bbox = {"cl_bbox", "0"};
+cvar_t	cl_bboxcolors = {"cl_bboxcolors", "1"};
 cvar_t	cl_maxfps = {"cl_maxfps", "72", CVAR_SERVER};
 cvar_t	cl_advancedcompletion = {"cl_advancedcompletion", "1"};
 cvar_t	cl_independentphysics = {"cl_independentphysics", "1", CVAR_INIT};
@@ -219,13 +221,8 @@ void CL_Disconnect (void)
 
 // stop sounds (especially looping!)
 	S_StopAllSounds (true);
+	BGM_Pause ();
 	
-	if (streamplaying)
-		FMOD_Stop_Stream_f();
-
-#ifdef GLQUAKE
-	FMOD_Stop_f ();
-#endif
 
 // if running a local server, shut it down
 	if (cls.demoplayback)
@@ -280,6 +277,7 @@ void CL_Disconnect (void)
 void CL_Disconnect_f (void)
 {
 	CL_Disconnect ();
+	BGM_Stop ();
 	if (sv.active)
 		Host_ShutdownServer (false);
 }
@@ -740,7 +738,9 @@ void GetQuake3ViewWeaponModel(int *vwep_modelindex)
 
 qboolean CL_ShowBBoxes(void)
 {
-	return cl_bbox.value && !cls.demorecording;
+	qboolean demo_bbox = (cl_bbox.value == CL_BBOX_MODE_ON || cl_bbox.value == CL_BBOX_MODE_DEMO);
+	qboolean live_bbox = (cl_bbox.value == CL_BBOX_MODE_ON || cl_bbox.value == CL_BBOX_MODE_LIVE);
+	return ((demo_bbox && cls.demoplayback) || (live_bbox && !cls.demoplayback)) && !cls.demorecording;
 }
 
 
@@ -1454,6 +1454,7 @@ void CL_Init (void)
 	CL_InitModelnames ();
 	CL_InitTEnts ();
 	Ghost_Init ();
+	PathTracer_Init();
 	CL_InitDemo ();
 	DemoCam_Init ();
 
@@ -1490,6 +1491,7 @@ void CL_Init (void)
 	Cvar_Register (&cl_deadbodyfilter);
 	Cvar_Register (&cl_gibfilter);
 	Cvar_Register (&cl_bbox);
+	Cvar_Register (&cl_bboxcolors);
 	Cvar_Register (&cl_maxfps);
 	Cvar_Register (&cl_advancedcompletion);
 	Cvar_Register (&cl_independentphysics);
@@ -1526,6 +1528,7 @@ CL_Shutdown
 */
 void CL_Shutdown (void)
 {
+    PathTracer_Shutdown();
     Ghost_Shutdown();
     CL_ShutdownDemo();
 }

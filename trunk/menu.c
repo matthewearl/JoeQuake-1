@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // menu.c
 
 #include "quakedef.h"
+#include "sound.h"
 #include "winquake.h"
 
 qboolean vid_windowedmouse = true;
@@ -4173,7 +4174,7 @@ void M_Sound_KeyboardSlider(int dir)
 
 	case 1:	// bgm volume
 		bgmvolume.value += dir * 0.1;
-		bgmvolume.value = bound(0, bgmvolume.value, 1);
+		bgmvolume.value = bound(0.0f, bgmvolume.value, 1.0f);
 		Cvar_SetValue(&bgmvolume, bgmvolume.value);
 		break;
 	}
@@ -4384,7 +4385,10 @@ void M_View_Draw (void)
 	glColor3ubv(color_white);
 
 	M_Print_GetPoint(16, 144, &lx, &ly, "   Show bounding boxes", view_cursor == 14);
-	M_DrawCheckbox(220, 144, cl_bbox.value);
+	M_Print(220, 144, cl_bbox.value == CL_BBOX_MODE_ON
+						? "on" : cl_bbox.value == CL_BBOX_MODE_DEMO
+						? "demo only" : cl_bbox.value == CL_BBOX_MODE_LIVE
+						? "live only" : "off");
 
 	M_Print_GetPoint(16, 152, &lx, &ly, "      Fullbright skins", view_cursor == 15);
 	M_Print(220, 152, !r_fullbrightskins.value ? "off" : r_fullbrightskins.value == 2 ? "players + monsters" : "players");
@@ -4549,7 +4553,7 @@ void M_View_Key (int k)
 			break;
 
 		case 14:
-			Cvar_SetValue(&cl_bbox, !cl_bbox.value);
+			Cvar_SetValue(&cl_bbox, ((int)cl_bbox.value + 1) % NUM_BBOX_MODE);
 			break;
 
 		case 15:

@@ -347,10 +347,10 @@ The number of decimal places can be changed with the `_dp` variable.
 
 ##### `cl_bbox`
 
-When set to 1 display bounding boxes for non-map entities. The bounding boxes
-are derived from information available to the client, therefore they work while
-playing a demo as well as when playing a live game. However, the bounding boxes
-have the following limitations:
+Enables bounding boxes for non-map entities. The bounding boxes are derived from
+information available to the client, therefore they work while playing a demo as
+well as when playing a live game. However, the bounding boxes have the following
+limitations:
 
 - If using non-id1 progs, bounding boxes may be missing or incorrect.  This is
   unavoidable since bounding box information is not sent to the client or stored
@@ -359,6 +359,23 @@ have the following limitations:
 - Bounding box origins may be wrong by up to 0.125 game units owing to fixed
   precision in the coordinates sent to the client and stored in the demo.
 - Bounding boxes are not displayed when *recording* a demo.
+
+The cvar takes the following values:
+- `0`: Bounding boxes are never drawn.
+- `1`: Bounding boxes are drawn during demo playback and when playing live, but
+  not when recording.
+- `2`: Bounding boxes are drawn only during demo playback.
+- `3`: Bounding boxes are drawn only when playing live, but not when recording.
+
+##### `cl_bboxcolors`
+
+When set to `1` (the default), `cl_bbox` bounding boxes are colored according to
+entity type:
+- Monsters are red.
+- Pickups are green.
+- Everything else is white.
+
+When set to `0` bounding boxes are all drawn white.
 
 #### Server
 
@@ -940,6 +957,81 @@ into smaller files is a good idea to avoid this corruption.
 Default is `1900` megabytes.  
 Setting to `0` disables splitting.
 
+#### Path Tracer
+
+##### `pathtracer_record_player`
+
+If set to `1`: Record path that you, the player, takes. Includes movement keys.
+
+Default: `0`
+
+##### `pathtracer_show_player`
+
+If set to `1`: Draws path that was previously recorded, draws movement keys.
+
+Default: `0`
+
+##### `pathtracer_show_demo`
+
+If set to `1`: Draws path of the demo. If the demo contains movement keys then they will be drawn.
+
+Default: `0`
+
+##### `pathtracer_show_ghost`
+
+If set to `1`: Draws path of the ghost. If the ghost contains movement keys then they will be drawn.
+
+Default: `0`
+
+##### `pathtracer_movekeys_player`
+
+If set to `1`: Draw the movement keys on the path.
+
+Default: `1`
+
+##### `pathtracer_movekeys_demo`
+
+If set to `1`: Draw the movement keys on the path
+
+Default: `1`
+
+##### `pathtracer_movekeys_ghost`
+
+If set to `1`: Draw the movement keys on the path
+
+Default: `1`
+
+##### `pathtracer_fadeout_ghost`
+
+If set to `1`: Draw path (and if available movment keys) only directly around the current position of the ghost. Other parts of the path are greyed out.
+
+Default: `0`
+
+##### `pathtracer_fadeout_demo`
+
+If set to `1`: Draw path (and if available movment keys) only directly around the current position of the demo. Other parts of the path are greyed out.
+
+Default: `1`
+
+##### `pathtracer_fadeout_seconds`
+
+Number of seconds to show path and movement key (if available) information around the current ghost or demo position.
+
+Default: `3`
+
+##### `pathtracer_line_smooth`
+
+If set to `1`: Enables line smoothing which makes the lines bolder and better visible.
+
+Default: `0`
+
+##### `pathtracer_line_skip_threshold`
+
+The line will not be drawn if the length between the frames is larger than this threshold. This help to not draw lines through the whole map when teleporting. This is a very technical topic, should not be relevant for most people.
+
+Default: `160`
+
+
 ### Commands
 
 #### All
@@ -1083,6 +1175,8 @@ Available usage modes (example values):
 - `demoseek 12` will seek to the time 0:12
 - `demoseek +3` will seek forward 3 seconds from the actual position
 - `demoseek -5` will seek back 5 seconds from the actual position
+- `demoseek +f` will seek forward one frame.
+- `demoseek -f` will seek back one frame.
 
 ##### `toggleparticles`
 
