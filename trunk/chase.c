@@ -55,8 +55,7 @@ void TraceLine (vec3_t start, vec3_t end, vec3_t impact)
 void Chase_Update (void)
 {
 	int	i;
-	float	dist;
-	vec3_t	forward, up, right, dest, start, stop;
+	vec3_t	forward, up, right, start, stop;
 
 	// if can't see player, reset
 	AngleVectors (cl.viewangles, forward, right, up);
