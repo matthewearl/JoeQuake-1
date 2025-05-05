@@ -182,7 +182,10 @@ static void PathTracer_Draw_Level (ghost_level_t* level, qboolean fadeout_enable
 	if (level->num_records <= 1)
 		return;
 
-	const vec3_t to_ground = { 0.f, 0.f, -20.f }; // Slightly above ground, so that the down arrow of the movement keys is visible
+	vec3_t to_ground = { 0.f, 0.f, -20.f }; // Slightly above ground, so that the down arrow of the movement keys is visible
+
+	if (r_draw_hull.value)
+		to_ground[2] = 0.0f;
 
 	// Trace path
 	glBegin(GL_LINES);
