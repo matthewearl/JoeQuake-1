@@ -42,6 +42,7 @@
 #include "set.h"
 #include <curl/curl.h>
 #include "browser_curl.h"
+#include <ctype.h>
 
 #define curmap() columns[COL_MAP]->array[columns[COL_MAP]->list.cursor]
 #define curtype() columns[COL_TYPE]->array[columns[COL_TYPE]->list.cursor]
@@ -60,8 +61,9 @@ static enum demos_tabs demos_tab = TAB_LOCAL_DEMOS;
 static enum browser_columns browser_col = COL_MAP;
 static enum map_filters map_filter = FILTER_DOWNLOADED, prev_map_filter = FILTER_ALL;
 
-static char search_term[40] = "\0";
+static char search_term[41] = "\0";
 static qboolean search_input = false;
+qboolean mod_changed = false;
 
 qcurses_recordlist_t * columns[COL_RECORD + 1];
 qcurses_char_t * comments;
@@ -123,7 +125,7 @@ void M_Demos_KeyHandle_Browser_Search (int k) {
             search_term[len - 1] = '\0';
         break;
     default:
-        if (k >= '0' && k <= 'z')
+        if (isalnum(k) || k == '_')
             if (len < 40)
                 search_term[len] = k;
         break;
@@ -193,8 +195,10 @@ void M_Demos_KeyHandle_Browser (int k) {
                 Cbuf_AddText (va("playdemo \"../.demo_cache/%s/%s.dz\"\n", curtype(), currec()));
             }
         }
-        browser_col = min(COL_COMMENT_LOADING, browser_col + 1);
-        S_LocalSound("misc/menu2.wav");
+        if (columns[browser_col]->list.len > 0) {
+            browser_col = min(COL_COMMENT_LOADING, browser_col + 1);
+            S_LocalSound("misc/menu2.wav");
+        }
         break;
     case K_BACKSPACE:
     case K_LEFTARROW:
@@ -315,16 +319,27 @@ qcurses_recordlist_t * Browser_CreateRecordColumn(const cJSON * json, int rows) 
  * going down the tree
  */
 void Browser_UpdateFurtherColumns (enum browser_columns start_column) {
+    if (!columns[start_column])
+        return;
+
     const cJSON *item = NULL;
     switch (start_column) {
     case COL_MAP:
-        if (columns[COL_TYPE])
+        if (columns[COL_TYPE]) {
+            if (columns[COL_TYPE]->array)
+                free(columns[COL_TYPE]->array);
             free(columns[COL_TYPE]);
+        }
         item = cJSON_GetObjectItemCaseSensitive(json, curmap());
         columns[COL_TYPE] = Browser_CreateTypeColumn(item, 15 - 2);
     case COL_TYPE:
-        if (columns[COL_RECORD])
+        if (columns[COL_RECORD]) {
+            if (columns[COL_RECORD]->array)
+                free(columns[COL_RECORD]->array);
+            if (columns[COL_RECORD]->sda_name)
+                free(columns[COL_RECORD]->sda_name);
             free(columns[COL_RECORD]);
+        }
         item = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(json, curmap()), curtype());
         columns[COL_RECORD] = Browser_CreateRecordColumn(item, 15 - 2);
     case COL_RECORD:
@@ -355,6 +370,12 @@ qcurses_char_t * Browser_TxtFile() {
     char path[50];
 
     Q_snprintfz(path, sizeof(path), ".demo_cache/%s/%s.dz", curtype(), currec());
+
+    Con_Printf("%s\n", path);
+    for (int i = 0; i < strlen(path); i++){
+        if (!isalnum(path[i]) && path[i] != '_' && path[i] != '.' && path[i] != '/' && path[i] != '\\')
+            return qcurses_parse_txt(Q_strdup("Improper filename in SDA database JSON!"));
+    }
 
 #ifdef _WIN32
     char	cmdline[1024];
@@ -387,7 +408,7 @@ qcurses_char_t * Browser_TxtFile() {
 
     Q_snprintfz(cmdline, sizeof(cmdline), "./dzip.exe -s \"%s\" \"%s.txt\"", path, currec());
     if (!CreateProcess(NULL, cmdline, NULL, NULL, TRUE, 0, NULL, com_basedir, &si, &pi)) {
-        return qcurses_parse_txt(va("Couldn't execute %s/dzip.exe\n", com_basedir));
+        return qcurses_parse_txt(Q_strdup(va("Couldn't execute %s/dzip.exe\n", com_basedir)));
     } else {
         CloseHandle(pi.hProcess);
         CloseHandle(pi.hThread);
@@ -402,7 +423,7 @@ qcurses_char_t * Browser_TxtFile() {
 #else
     switch (pid = fork()) {
     case -1:
-        return qcurses_parse_txt("ERROR: creating dzip process to read txt!\n");
+        return qcurses_parse_txt(Q_strdup("ERROR: creating dzip process to read txt!\n"));
     case 0:
         dup2 (pipes[1], STDERR_FILENO);
         dup2 (pipes[1], STDOUT_FILENO);
@@ -482,7 +503,7 @@ qcurses_recordlist_t * Browser_CreateMapColumn(const cJSON * json, int rows, enu
 /*
  * create box that displays help for each tab
  */
-void M_Demos_HelpBox (qcurses_box_t *help_box, enum demos_tabs tab, char * search_term, qboolean search_input) {
+void M_Demos_HelpBox (qcurses_box_t *help_box, enum demos_tabs tab, char * search_str, qboolean search_input) {
     qcurses_make_bar(help_box, 0);
     qcurses_print_centered(help_box, 2, "Navigation: arrows keys OR hjkl OR enter/backspace", false);
     qcurses_print_centered(help_box, 3, "Paging: page keys OR Ctrl+b and Ctrl+d", false);
@@ -504,7 +525,7 @@ void M_Demos_HelpBox (qcurses_box_t *help_box, enum demos_tabs tab, char * searc
         qcurses_print_centered(
             help_box,
             6,
-            va("Search: \x10%-40s\x11 (/ or Ctrl+f)", va("%s%c", search_term, search_input ? blink(0xb) : ' ')),
+            va("Search: \x10%-40s\x11 (/ or Ctrl+f)", va("%s%c", search_str, search_input ? blink(0xb) : ' ')),
             search_input
         );
     } else {
@@ -654,7 +675,7 @@ void M_Demos_DisplayBrowser (int cols, int rows, int start_col, int start_row) {
     }
 
     /* handle map column display */
-    if (prev_map_filter != map_filter || search_input) { /* apply filtering */
+    if (prev_map_filter != map_filter || search_input || mod_changed) { /* apply filtering */
         if (columns[COL_MAP]){
             free(columns[COL_MAP]->array);
             free(columns[COL_MAP]);
@@ -662,6 +683,7 @@ void M_Demos_DisplayBrowser (int cols, int rows, int start_col, int start_row) {
         columns[COL_MAP] = Browser_CreateMapColumn(json, rows - 12, map_filter);
         Browser_UpdateFurtherColumns(COL_MAP);
         prev_map_filter = map_filter;
+        mod_changed = false;
     }
 
     for (int i = 0; i < min(columns[COL_MAP]->list.len, columns[COL_MAP]->list.places); i++)
@@ -762,6 +784,7 @@ void M_Demos_DisplayBrowser (int cols, int rows, int start_col, int start_row) {
     if (browser_col == COL_COMMENT_LOADED && comments) {
         comment_rows = qcurses_boxprint_wrapped(comment_box, comments, comment_box->cols * comment_box->rows, 1);
         comment_page = min(comment_page, comment_rows - comment_box->rows);
+        comment_page = min(comment_page, comment_box->rows * 14); /* limit row display */
         comment_page = max(comment_page, 0);
         comment_box->paged = comment_page;
         if (comment_rows - comment_box->rows > 0) {
@@ -807,8 +830,18 @@ display:
  */
 void Browser_CreateMapSet() {
     SearchForMaps();
+
+    if (maps) {
+        set_destroy(maps);
+        free(maps);
+    }
     maps = calloc(1, sizeof(simple_set));
     set_init(maps);
+
+    if (id_maps) {
+        set_destroy(id_maps);
+        free(id_maps);
+    }
     id_maps = calloc(1, sizeof(simple_set));
     set_init(id_maps);
 
@@ -885,7 +918,7 @@ void M_Demos_Display (int width, int height) {
         main_box = qcurses_init(width / 8, height / 8);
     }
 
-    if (!maps)
+    if (!maps || mod_changed)
         Browser_CreateMapSet();
 
     if (!demlist || refresh_demlist) {

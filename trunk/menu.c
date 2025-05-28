@@ -26,6 +26,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 extern int browserscale;
 extern qboolean refresh_demlist;
+extern qboolean mod_changed;
 qboolean vid_windowedmouse = true;
 void (*vid_menudrawfn)(void);
 void (*vid_menukeyfn)(int key);
@@ -6742,6 +6743,8 @@ void M_Mods_Key(int k)
 		Cbuf_Execute();
 		Draw_ReloadPics();
 
+		mod_changed = true;
+
 		Q_strncpyz(prevdir, filelist[list_base + list_cursor].name, sizeof(prevdir));
 
 		if (searchbox)
@@ -8812,7 +8815,7 @@ void M_Draw (void)
 
 	case m_demos:
 #ifdef GLQUAKE
-		browserscale = vid.width / 8 >=240 ? 2 : 1;
+		browserscale = max(vid.width / 8 / 120, 1);
 		glMatrixMode (GL_PROJECTION);
 		glLoadIdentity ();
 		glOrtho (0, vid.width / browserscale, vid.height / browserscale, 0, -99999, 99999);
