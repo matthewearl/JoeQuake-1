@@ -103,8 +103,13 @@ void M_Demos_DisplayLocal (int cols, int rows, int start_col, int start_row) {
     for (int i = 0; i < min(demlist->list.len, demlist->list.places); i++) {
         direntry_t * d = demlist->entries + demlist->list.window_start + i;
         demo_summary_t * s = *(demlist->summaries + demlist->list.window_start + i);
-        if (ghost_demo_path[0] != '\0' && strcmp(ghost_demo_path, va("..%s/%s", demodir, demlist->entries[demlist->list.window_start + i].name)) == 0)
-            qcurses_print(name_box, 0, i + 2, "\x84", false);
+        if (Q_strcasestr(ghost_demo_path, ".dem")) {
+            if (ghost_demo_path[0] != '\0' && strcmp(ghost_demo_path, va("..%s/%s.dem", demodir, demlist->entries[demlist->list.window_start + i].name)) == 0)
+                qcurses_print(name_box, 0, i + 2, "\x0b", false);
+        } else {
+            if (ghost_demo_path[0] != '\0' && strcmp(ghost_demo_path, va("..%s/%s", demodir, demlist->entries[demlist->list.window_start + i].name)) == 0)
+                qcurses_print(name_box, 0, i + 2, "\x0b", false);
+        }
         qcurses_print(name_box, 1, i + 2, d->name, !d->type);
 
         switch (d->type) {
@@ -171,6 +176,9 @@ int get_summary_thread(void * entry) {
     demo_summary_t *summary = calloc(1, sizeof(demo_summary_t));
 
     FILE *demo_file = Ghost_OpenDemoOrDzip(((thread_data_t *) entry)->path);;
+    if (!demo_file)
+        return 1;
+
     int ok = DS_GetDemoSummary(demo_file, summary);
     if (ok) {
         SDL_SemWait(filelist_lock);
@@ -228,7 +236,7 @@ void M_Demos_LocalRead(int rows, char * prevdir) {
                 thread_data_t * data = calloc(1, sizeof(thread_data_t));
 
                 data->summary = *(demlist->summaries + j);
-                Q_snprintfz(data->path, sizeof(data->path), "..%s/%s", demodir, demlist->entries[j].name);
+                Q_snprintfz(data->path, sizeof(data->path), "..%s/%s.dem", demodir, demlist->entries[j].name);
                 SDL_CreateThread(get_summary_thread, "make summary", (void *) data);
             }
             j++;
@@ -331,11 +339,17 @@ void M_Demos_KeyHandle_Local (int k, int max_lines) {
             M_Demos_LocalRead(max_lines, prevdir);
         } else {
             if (keydown[K_CTRL] && !keydown[K_SHIFT]) {
-                Cbuf_AddText (va("ghost \"..%s/%s\"\n", demodir, demlist->entries[demlist->list.cursor].name));
+                if (Q_strcasestr(demlist->entries[demlist->list.cursor].name, ".dz"))
+                    Cbuf_AddText (va("ghost \"..%s/%s\"\n", demodir, demlist->entries[demlist->list.cursor].name));
+                else
+                    Cbuf_AddText (va("ghost \"..%s/%s.dem\"\n", demodir, demlist->entries[demlist->list.cursor].name));
             } else {
                 if (!keydown[K_ALT])
                     key_dest = key_game;
-                Cbuf_AddText (va("playdemo \"..%s/%s\"\n", demodir, demlist->entries[demlist->list.cursor].name));
+                if (Q_strcasestr(demlist->entries[demlist->list.cursor].name, ".dz"))
+                    Cbuf_AddText (va("playdemo \"..%s/%s\"\n", demodir, demlist->entries[demlist->list.cursor].name));
+                else
+                    Cbuf_AddText (va("playdemo \"..%s/%s.dem\"\n", demodir, demlist->entries[demlist->list.cursor].name));
             }
         }
     }

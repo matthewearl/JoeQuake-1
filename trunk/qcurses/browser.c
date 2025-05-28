@@ -52,6 +52,9 @@ qcurses_box_t * main_box = NULL;
 qcurses_box_t * local_box = NULL;
 
 int browserscale;
+qboolean refresh_demlist;
+int oldwidth;
+int oldheight;
 
 static enum demos_tabs demos_tab = TAB_LOCAL_DEMOS;
 static enum browser_columns browser_col = COL_MAP;
@@ -131,6 +134,9 @@ void M_Demos_KeyHandle_Browser_Search (int k) {
  * handle keyboard input for the browser and various columns
  */
 void M_Demos_KeyHandle_Browser (int k) {
+    if (curl && curl->running)
+        return;
+
     if (search_input) {
         M_Demos_KeyHandle_Browser_Search(k);
         return;
@@ -228,7 +234,7 @@ void M_Demos_KeyHandle (int k) {
             demos_tab = demos_tab % TAB_SDA_DATABASE + 1;
             S_LocalSound("misc/menu1.wav");
             if (demos_tab == TAB_LOCAL_DEMOS) 
-                M_Demos_LocalRead(main_box->rows - 8, NULL);
+                M_Demos_LocalRead(main_box->rows - 20, NULL);
 
             break;
     }
@@ -402,7 +408,7 @@ qcurses_char_t * Browser_TxtFile() {
         dup2 (pipes[1], STDOUT_FILENO);
         close(pipes[0]);
         close(pipes[1]);
-        execlp("./dzip-linux", "dzip-linux", "-s", path, va("%s.txt", currec()));
+        execlp("./dzip-linux", "dzip-linux", "-s", path, va("%s.txt", currec()), NULL);
         return qcurses_parse_txt("Not supposed to get here.\n");
     default:
         close(pipes[1]);
@@ -550,7 +556,7 @@ void mouse_map_cursor(qcurses_char_t * self, const mouse_state_t *ms) {
 void mouse_type_cursor(qcurses_char_t * self, const mouse_state_t *ms) {
     int row = self->callback_data.row - 2;
 
-    if (!json)
+    if (!json || browser_col < COL_TYPE)
         return;
 
     qcurses_recordlist_t * ls = columns[COL_TYPE];
@@ -577,7 +583,7 @@ void mouse_record_cursor(qcurses_char_t * self, const mouse_state_t *ms) {
     int row = self->callback_data.row - 2;
     qboolean play = false;
 
-    if (!json)
+    if (!json || browser_col < COL_RECORD)
         return;
 
     qcurses_recordlist_t * ls = columns[COL_RECORD];
@@ -710,7 +716,7 @@ void M_Demos_DisplayBrowser (int cols, int rows, int start_col, int start_row) {
 
             /* display marker for ghost */
             if (ghost_demo_path[0] != '\0' && strcmp(ghost_demo_path, va("../.demo_cache/%s/%s.dz", curtype(), columns[COL_RECORD]->sda_name[columns[COL_RECORD]->list.window_start + i])) == 0)
-                qcurses_print(time_box, 0, 2 + i, "\x84", false);
+                qcurses_print(time_box, 0, 2 + i, "\x0b", false);
         }
 
         if (browser_col == COL_RECORD)
@@ -845,6 +851,9 @@ qboolean M_Demos_Mouse_Event(const mouse_state_t *ms) {
     int col = mouse_col(ms->x);
     int row = mouse_row(ms->y);
 
+    if (curl && curl->running)
+        return true;
+
     if (0 <= col && col < main_box->cols && 0 <= row && row < main_box->rows)
         if (main_box->grid[row][col].callback)
             main_box->grid[row][col].callback(main_box->grid[row] + col, ms);
@@ -862,16 +871,27 @@ void mouse_tab_remote(qcurses_char_t * self, const mouse_state_t *ms) { if (ms->
  */
 void M_Demos_Display (int width, int height) {
     if (!main_box) {
+        oldwidth = width;
+        oldheight = height;
         main_box = qcurses_init(width / 8, height / 8);
         if (curl_global_init(CURL_GLOBAL_DEFAULT))
             Con_Printf("curl global init failure!\n");
     }
 
+    if (oldwidth != width || oldheight != height) {
+        qcurses_free(main_box);
+        oldwidth = width;
+        oldheight = height;
+        main_box = qcurses_init(width / 8, height / 8);
+    }
+
     if (!maps)
         Browser_CreateMapSet();
 
-    if (!demlist)
+    if (!demlist || refresh_demlist) {
+        refresh_demlist = false;
         M_Demos_LocalRead(main_box->rows - 20, NULL);
+    }
 
     if (curl && curl->running)
         demos_update = true;
