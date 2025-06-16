@@ -91,6 +91,17 @@ extern int comment_rows;
 extern char ghost_demo_path[MAX_OSPATH];
 
 /*
+ * sanitise inputs
+ */
+char * sanitise(char * str) {
+    for (int i = 0; i < strlen(str); i++)
+        if (!isalnum(str[i]) && str[i] != '_' && str[i] != '.' && str[i] != '/' && str[i] != '\\')
+            return NULL;
+
+    return str;
+}
+
+/*
  * get time with no decimals, important for filenames
  */
 char *GetPrintedTimeNoDec(float time, qboolean strip) {
@@ -264,13 +275,13 @@ void M_Demos_KeyHandle (int k) {
 qcurses_recordlist_t * Browser_CreateTypeColumn(const cJSON * json, int rows) {
     const cJSON *type = NULL;
 
-    qcurses_recordlist_t *column = calloc(1, sizeof(qcurses_recordlist_t));
+    qcurses_recordlist_t *column = Q_calloc(1, sizeof(qcurses_recordlist_t));
 
     column->list.cursor = 0;
     column->list.len = cJSON_GetArraySize(json);
     column->list.places = rows;
     column->list.window_start = 0;
-    column->array = calloc(column->list.len, sizeof(char[80]));
+    column->array = Q_calloc(column->list.len, sizeof(char[80]));
 
     int i = 0;
     cJSON_ArrayForEach(type, json) {
@@ -286,14 +297,14 @@ qcurses_recordlist_t * Browser_CreateTypeColumn(const cJSON * json, int rows) {
 qcurses_recordlist_t * Browser_CreateRecordColumn(const cJSON * json, int rows) {
     const cJSON *record = NULL;
 
-    qcurses_recordlist_t *column = calloc(1, sizeof(qcurses_recordlist_t));
+    qcurses_recordlist_t *column = Q_calloc(1, sizeof(qcurses_recordlist_t));
 
     column->list.cursor = 0;
     column->list.len = cJSON_GetArraySize(json);
     column->list.places = rows;
     column->list.window_start = 0;
-    column->array = calloc(column->list.len, sizeof(char[80]));
-    column->sda_name = calloc(column->list.len, sizeof(char[50]));
+    column->array = Q_calloc(column->list.len, sizeof(char[80]));
+    column->sda_name = Q_calloc(column->list.len, sizeof(char[50]));
 
     int i = 0;
     cJSON_ArrayForEach(record, json) {
@@ -354,6 +365,9 @@ void Browser_UpdateFurtherColumns (enum browser_columns start_column) {
 qboolean Browser_DzipDownloaded() {
     char path[50];
 
+    if (!sanitise(curtype()) || !sanitise(currec()))
+        return false;
+
     Q_snprintfz(path, sizeof(path), ".demo_cache/%s/%s.dz", curtype(), currec());
 
 #ifdef _WIN32
@@ -368,14 +382,11 @@ qboolean Browser_DzipDownloaded() {
  */
 qcurses_char_t * Browser_TxtFile() {
     char path[50];
+    
+    if (!sanitise(curtype()) || !sanitise(currec()))
+        return qcurses_parse_txt(Q_strdup("Improper filename in SDA database JSON!"));
 
     Q_snprintfz(path, sizeof(path), ".demo_cache/%s/%s.dz", curtype(), currec());
-
-    Con_Printf("%s\n", path);
-    for (int i = 0; i < strlen(path); i++){
-        if (!isalnum(path[i]) && path[i] != '_' && path[i] != '.' && path[i] != '/' && path[i] != '\\')
-            return qcurses_parse_txt(Q_strdup("Improper filename in SDA database JSON!"));
-    }
 
 #ifdef _WIN32
     char	cmdline[1024];
@@ -416,7 +427,7 @@ qcurses_char_t * Browser_TxtFile() {
         CloseHandle(child_stdout_write);
     }
 
-    char * txt = calloc(4096*8, sizeof(char));
+    char * txt = Q_calloc(4096*8, sizeof(char));
     ReadFile(child_stdout_read, txt, 4096*8, &dwRead, NULL);
     CloseHandle(child_stdout_read);
     return qcurses_parse_txt(txt);
@@ -433,7 +444,7 @@ qcurses_char_t * Browser_TxtFile() {
         return qcurses_parse_txt("Not supposed to get here.\n");
     default:
         close(pipes[1]);
-        char * txt = calloc(4096*8, sizeof(char));
+        char * txt = Q_calloc(4096*8, sizeof(char));
         read(pipes[0], txt, 4096*8);
         waitpid(-1, NULL, 0);
         close(pipes[0]);
@@ -448,6 +459,9 @@ qcurses_char_t * Browser_TxtFile() {
 void Browser_DownloadDzip() {
     char path[50];
     char href[100];
+
+    if (!sanitise(curtype()) || !sanitise(currec()))
+        return;
 
     Q_snprintfz(path, sizeof(path), ".demo_cache/%s/", curtype());
     COM_CreatePath(path);
@@ -470,13 +484,13 @@ void Browser_DownloadDzip() {
 qcurses_recordlist_t * Browser_CreateMapColumn(const cJSON * json, int rows, enum map_filters filter) {
     const cJSON *map = NULL;
 
-    qcurses_recordlist_t *column = calloc(1, sizeof(qcurses_recordlist_t));
+    qcurses_recordlist_t *column = Q_calloc(1, sizeof(qcurses_recordlist_t));
 
     column->list.cursor = 0;
     column->list.len = cJSON_GetArraySize(json);
     column->list.places = rows;
     column->list.window_start = 0;
-    column->array = calloc(column->list.len, sizeof(char[80]));
+    column->array = Q_calloc(column->list.len, sizeof(char[80]));
 
     int i = 0;
     cJSON_ArrayForEach(map, json) {
@@ -802,8 +816,6 @@ void M_Demos_DisplayBrowser (int cols, int rows, int start_col, int start_row) {
                 false
             );
         }
-    } else if (browser_col == COL_COMMENT_LOADED) {
-        qcurses_print_centered(comment_box, comment_box->rows / 2, "Text file not provided.", false);
     }
 
     M_Demos_HelpBox (help_box, demos_tab, search_term, search_input);
@@ -835,14 +847,14 @@ void Browser_CreateMapSet() {
         set_destroy(maps);
         free(maps);
     }
-    maps = calloc(1, sizeof(simple_set));
+    maps = Q_calloc(1, sizeof(simple_set));
     set_init(maps);
 
     if (id_maps) {
         set_destroy(id_maps);
         free(id_maps);
     }
-    id_maps = calloc(1, sizeof(simple_set));
+    id_maps = Q_calloc(1, sizeof(simple_set));
     set_init(id_maps);
 
     for (int i = 0; i < num_files; i++)
