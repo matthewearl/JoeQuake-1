@@ -53,6 +53,7 @@ typedef struct bhop_data_s
 
     qboolean on_ground;	
     vec3_t velocity;
+    vec3_t angles;
 
     float speed;
     float speed_gain;
@@ -91,6 +92,9 @@ extern bhop_data_t *bhop_history;
 /* crosshair displays */
 #define BHOP_ANGLE_MARK             1<<5  /* mark in viewport showing where the optimal direction is, last tick */
 #define BHOP_CROSSHAIR_INFO         1<<6 /* info above crosshair */
+
+/* bhop circle chart */
+#define BHOP_CIRCLE                 1<<10 /* draw bhop circle */
 
 /* color constants for convenience */
 #define BHOP_GREEN 184 /* actually blue because the green sucks shit */ 
