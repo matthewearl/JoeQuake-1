@@ -44,6 +44,8 @@ typedef struct edict_s
 	unsigned char	alpha;		/* johnfitz -- hack to support alpha since it's not part of entvars_t */
 	unsigned char	scale;
 	qboolean	sendinterval;	/* johnfitz -- send time until nextthink to client for better lerp timing */
+	float		oldframe;
+	float		oldthinktime;
 
 	float		freetime;		// sv.time when the object was freed
 	entvars_t	v;				// C exported fields from progs
@@ -52,6 +54,7 @@ typedef struct edict_s
 
 #define	EDICT_FROM_AREA(l) STRUCT_FROM_LINK(l,edict_t,area)
 #define	GETEDICTFIELDVALUE(ed, fieldoffset) (fieldoffset ? (eval_t *)((byte *)&ed->v + fieldoffset) : NULL)
+#define GETEDICTFIELDNAME(ed, field) (ED_FindField(field) ? PR_ValueString(ED_FindField(field)->type, (eval_t *)(int *)((char *)&ed->v + (ED_FindField(field))->ofs*4)) : "")
 
 extern	int	eval_gravity, eval_items2, eval_ammo_shells1, eval_ammo_nails1;
 extern	int	eval_ammo_lava_nails, eval_ammo_rockets1, eval_ammo_multi_rockets;

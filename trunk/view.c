@@ -64,6 +64,7 @@ cvar_t	show_stats_small = {"show_stats_small", "0"};
 cvar_t	show_stats_length = {"show_stats_length", "0.5"};
 
 cvar_t	show_movekeys = {"show_movekeys", "0"};
+cvar_t	show_grenadecounter = {"show_grenadecounter", "0"};
 
 cvar_t	cl_rollspeed = {"cl_rollspeed", "200"};
 cvar_t	cl_rollangle = {"cl_rollangle", "2.0"};
@@ -109,6 +110,11 @@ cvar_t	v_bonusflash = {"cl_bonusflash", "1"};
 
 float	v_dmg_time, v_dmg_roll, v_dmg_pitch;
 float	xyspeed;
+
+extern int tracked_edict;
+extern ddef_t * ED_FindField(char*);
+extern char * PR_ValueString(etype_t type, eval_t *val);
+
 
 
 /*
@@ -1009,7 +1015,7 @@ void V_CalcViewRoll (void)
 	}
 }
 
-void V_AddViewWeapon (float bob)
+void V_AddViewWeapon (entity_t *ent, float bob)
 {
 	int			i;
 	vec3_t		forward, right, up;
@@ -1046,6 +1052,14 @@ void V_AddViewWeapon (float bob)
 		else if (scr_viewsize.value == 80)
 			view->origin[2] += 0.5;
 	}
+
+	if (ent->lerpflags & LERP_FINISH)
+	{
+		view->lerpflags |= LERP_FINISH;
+		view->lerpfinish = ent->lerpfinish;
+	}
+	else
+		view->lerpflags &= ~LERP_FINISH;
 
 	view->model = cl.model_precache[cl.stats[STAT_WEAPON]];
 	view->frame = cl.stats[STAT_WEAPONFRAME];
@@ -1148,7 +1162,7 @@ void V_CalcRefdef (void)
 	if (cl.stats[STAT_HEALTH] <= 0)
 		r_refdef.viewangles[ROLL] = 80;	// dead view angle
 
-	V_AddViewWeapon (bob);
+	V_AddViewWeapon (ent, bob);
 
 	if (cl_thirdperson.value)
 		Chase_Update ();
@@ -1356,6 +1370,125 @@ void SCR_DrawStats (void)
 	}
 }
 
+
+void SCR_DrawDelayEdicts (void)
+{
+	int i, pos = 4;
+	edict_t * ed;
+	char *field;
+
+	float scale = Sbar_GetScaleAmount();
+	int size = Sbar_GetScaledCharacterSize();
+
+	Draw_AlphaFill(vid.width - (size * 25), pos * size, 25 * size / scale, 6 * size / scale, 0, 0.8);
+
+	for (i = 1; i < sv.num_edicts && pos < 6; i++) {
+		ed = EDICT_NUM(i);
+		field = GETEDICTFIELDNAME(ed, "classname");
+		
+		if (Q_strncasecmp(field, "DelayedUse", 10) == 0){
+			float next = atof(GETEDICTFIELDNAME(ed, "nextthink"));
+			char string[31];
+
+			Q_snprintfz(string, 25, "delay: %s at %.2f", GETEDICTFIELDNAME(ed, "target"), next);
+			Draw_String (vid.width - (size * 25), size * (pos++), string, true);
+		}
+	}
+
+}
+void SCR_DrawEdictTracker (void)
+{
+	float diff;
+	edict_t * ed;
+	char *field;
+	char string[31];
+
+	float scale = Sbar_GetScaleAmount();
+	int size = Sbar_GetScaledCharacterSize();
+
+	if (cl_track_edict.value >= 1) 
+		tracked_edict = cl_track_edict.value;
+
+	if (cl_track_edict.value == -1) {
+		SCR_DrawDelayEdicts();
+		return;
+	}
+
+	if (!tracked_edict || tracked_edict >= sv.num_edicts)
+		return;
+
+	ed = EDICT_NUM(tracked_edict);
+
+	Draw_AlphaFill(vid.width - (size * 25), 0, 25 * size / scale, 20 * size / scale, 0, 0.8);
+
+	field = GETEDICTFIELDNAME(ed, "classname");
+	Q_snprintfz(string, 25, "%d: %s", tracked_edict, field);
+	Draw_String (vid.width - (size * 25), 0, string, true);
+
+	field = GETEDICTFIELDNAME(ed, "netname");
+	Q_snprintfz(string, 25, "%s", field);
+	Draw_String (vid.width - (size * 25), size, string, true);
+
+	field = GETEDICTFIELDNAME(ed, "origin");
+	Draw_String (vid.width - (size * 25), 2 * size, field, true);
+
+	field = GETEDICTFIELDNAME(ed, "target");
+	Q_snprintfz(string, 25, "target    : %s", field);
+	Draw_String (vid.width - (size * 25), 4 * size, string, true);
+
+	field = GETEDICTFIELDNAME(ed, "killtarget");
+	Q_snprintfz(string, 25, "killtarget: %s", field);
+	Draw_String (vid.width - (size * 25), 5 * size, string, true);
+
+	field = GETEDICTFIELDNAME(ed, "targetname");
+	Q_snprintfz(string, 25, "targetname: %s", field);
+	Draw_String (vid.width - (size * 25), 6 * size, string, true);
+
+	field = GETEDICTFIELDNAME(ed, "health");
+	Q_snprintfz(string, 25, "health    : %s", field);
+	Draw_String (vid.width - (size * 25), 8 * size, string, true);
+
+	field = GETEDICTFIELDNAME(ed, "think");
+	Q_snprintfz(string, 25, "think     : %s", field);
+	Draw_String (vid.width - (size * 25), 9 * size, string, true);
+
+	field = GETEDICTFIELDNAME(ed, "nextthink");
+	diff = atof(field) - cl.ctime;
+	Q_snprintfz(string, 25, "nextthink : %.3f (%dms)", atof(field), diff > 0.0 ? (int)(1000.0 * diff) : 0);
+	Draw_String (vid.width - (size * 25), 10 * size, string, true);
+
+	field = GETEDICTFIELDNAME(ed, "touch");
+	Q_snprintfz(string, 25, "touch     : %s", field);
+	Draw_String (vid.width - (size * 25), 11 * size, string, true);
+
+	field = GETEDICTFIELDNAME(ed, "pain_finished");
+	Q_snprintfz(string, 25, "pain_fin  : %.2f (%.3f)", atof(field), atof(field) - cl.ctime);
+	Draw_String (vid.width - (size * 25), 12 * size, string, true);
+
+	field = GETEDICTFIELDNAME(ed, "attack_finished");
+	Q_snprintfz(string, 25, "attack_fin: %.2f (%.3f)", atof(field), atof(field) - cl.ctime);
+	Draw_String (vid.width - (size * 25), 13 * size, string, true);
+
+	field = GETEDICTFIELDNAME(ed, "search_time");
+    Q_snprintfz(string, 25, "searchtime: %.2f (%.3f)", atof(field), cl.ctime - atof(field));
+    Draw_String (vid.width - (size * 25), 14 * size, string, true);
+
+    field = GETEDICTFIELDNAME(ed, "show_hostile");
+    Q_snprintfz(string, 25, "showhostil: %.2f (%.3f)", atof(field), cl.ctime - atof(field));
+    Draw_String (vid.width - (size * 25), 15 * size, string, true);
+
+    field = GETEDICTFIELDNAME(ed, "enemy");
+    Q_snprintfz(string, 25, "enemy     : %s", field);
+    Draw_String (vid.width - (size * 25), 17 * size, string, true);
+
+    field = GETEDICTFIELDNAME(ed, "goalentity");
+    Q_snprintfz(string, 25, "goalentity: %s", field);
+    Draw_String (vid.width - (size * 25), 18 * size, string, true);
+
+    field = GETEDICTFIELDNAME(ed, "movetarget");
+    Q_snprintfz(string, 25, "movetarget: %s", field);
+    Draw_String (vid.width - (size * 25), 19 * size, string, true);
+}
 /*
 ===============
 SCR_DrawVolume
@@ -1664,6 +1797,7 @@ void V_Init (void)
 	Cvar_Register (&show_stats_length);
 
 	Cvar_Register (&show_movekeys);
+	Cvar_Register (&show_grenadecounter);
 
 	Cvar_Register (&cl_rollspeed);
 	Cvar_Register (&cl_rollangle);

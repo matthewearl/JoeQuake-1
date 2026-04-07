@@ -56,6 +56,7 @@ typedef struct interpolated_weapon
 
 static	interp_weapon_t	interpolated_weapons[INTERP_WEAP_MAXNUM];
 static	int		interp_weap_num = 0;
+int tracked_edict;
 
 int DoWeaponInterpolation (void);
 
@@ -95,6 +96,7 @@ cvar_t	r_lightmap = {"r_lightmap", "0"};
 cvar_t	r_shadows = {"r_shadows", "0"};
 qboolean OnChange_r_wateralpha(cvar_t *var, char *string);
 cvar_t	r_wateralpha = {"r_wateralpha", "1", 0, OnChange_r_wateralpha };
+cvar_t	r_wateralpha_override = { "r_wateralpha_override", "0" };
 cvar_t	r_litwater = { "r_litwater", "1" };
 cvar_t	r_dynamic = {"r_dynamic", "1"};
 cvar_t	r_novis = {"r_novis", "0" };
@@ -104,6 +106,7 @@ cvar_t	r_outline_players = { "r_outline_players", "0" };
 cvar_t	r_outline_monsters = { "r_outline_monsters", "0" };
 cvar_t	r_outline_color = {"r_outline_color", "0 0 0" };
 cvar_t	r_fullbrightskins = {"r_fullbrightskins", "0"};
+cvar_t	r_fullbrightskins_monsters = {"r_fullbrightskins_monsters", "0"};
 cvar_t	r_fastsky = {"r_fastsky", "0"};
 cvar_t	r_skycolor = {"r_skycolor", "4"};
 cvar_t	r_drawflame = {"r_drawflame", "1"};
@@ -193,6 +196,9 @@ typedef enum
 	BBOX_CAT_MISC,
 	BBOX_CAT_MONSTER,
 	BBOX_CAT_PICKUP,
+	BBOX_CAT_TRIGGER,
+	BBOX_CAT_HIGHLIGHT,
+	BBOX_CAT_LINKED,
 
 	NUM_BBOX_CAT
 } bbox_cat_t;
@@ -279,9 +285,12 @@ static id1_bbox_t id1_bboxes[] = {
 };
 
 static vec3_t bbox_colors[NUM_BBOX_CAT] = {
-	[BBOX_CAT_MISC] = {1, 1, 1},
-	[BBOX_CAT_MONSTER] = {1, 0, 0},
-	[BBOX_CAT_PICKUP] = {0, 1, 0},
+	[BBOX_CAT_MISC] = {0.5, 0.5, 0.5}, // white
+	[BBOX_CAT_MONSTER] = {0.5, 0, 0}, // red
+	[BBOX_CAT_PICKUP] = {0, 0.5, 0}, // green
+	[BBOX_CAT_TRIGGER] = {0.5, 0.3, 0}, //amber
+	[BBOX_CAT_HIGHLIGHT] = {0.0, 0.5, 0.5}, //teal
+	[BBOX_CAT_LINKED] = {0.5, 0.0, 0.5}, //purple
 };
 
 void R_MarkSurfaces(void);
@@ -1574,7 +1583,7 @@ R_SetupLighting
 void R_SetupLighting (entity_t *ent)
 {
 	int		lnum;
-	float	add, theta;
+	float	add, theta, fb_skins_value;
 	vec3_t	dist, dlight_color;
 	model_t	*clmodel = ent->model;
 	static float shadescale = 0;
@@ -1674,33 +1683,33 @@ void R_SetupLighting (entity_t *ent)
 	// never allow players to go totally black
 	if (Mod_IsAnyKindOfPlayerModel(clmodel))
 	{
+		add = 24.0f - (lightcolor[0] + lightcolor[1] + lightcolor[2]);
+		if (add > 0.0f)
+		{
+			lightcolor[0] += add / 3.0f;
+			lightcolor[1] += add / 3.0f;
+			lightcolor[2] += add / 3.0f;
+		}
+
 		// brighten player models if r_fullbrightskins is not 0
 		if (r_fullbrightskins.value)
 		{
-			lightcolor[0] = 176.0f;
-			lightcolor[1] = 176.0f;
-			lightcolor[2] = 176.0f;
+			fb_skins_value = bound(0.0, r_fullbrightskins.value, 1.0);
+			lightcolor[0] += (176.0f - lightcolor[0]) * fb_skins_value;
+			lightcolor[1] += (176.0f - lightcolor[1]) * fb_skins_value;
+			lightcolor[2] += (176.0f - lightcolor[2]) * fb_skins_value;
 			overbright = false;
 			full_light = true;
 		}
-		else
-		{
-			add = 24.0f - (lightcolor[0] + lightcolor[1] + lightcolor[2]);
-			if (add > 0.0f)
-			{
-				lightcolor[0] += add / 3.0f;
-				lightcolor[1] += add / 3.0f;
-				lightcolor[2] += add / 3.0f;
-			}
-		}
 	}
 
-	// brighten monster models if r_fullbrightskins is 2
-	if (Mod_IsMonsterModel(ent->modelindex) && r_fullbrightskins.value == 2)
+	// brighten monster models if r_fullbrightskins_monsters is not 0
+	if (Mod_IsMonsterModel(ent->modelindex) && r_fullbrightskins_monsters.value)
 	{
-		lightcolor[0] = 176.0f;
-		lightcolor[1] = 176.0f;
-		lightcolor[2] = 176.0f;
+		fb_skins_value = bound(0.0, r_fullbrightskins_monsters.value, 1.0);
+		lightcolor[0] += (176.0f - lightcolor[0]) * fb_skins_value;
+		lightcolor[1] += (176.0f - lightcolor[1]) * fb_skins_value;
+		lightcolor[2] += (176.0f - lightcolor[2]) * fb_skins_value;
 		overbright = false;
 		full_light = true;
 	}
@@ -1863,9 +1872,10 @@ static void R_DrawBbox(vec3_t origin, vec3_t mins, vec3_t maxs, vec3_t color)
 	glColor3f(color[0], color[1], color[2]);
 
 	glCullFace(GL_FRONT);
-	glPolygonMode(GL_BACK, GL_LINE);
+    glPolygonMode(GL_BACK, GL_LINE);
 	glLineWidth(1.0);
 	glEnable(GL_LINE_SMOOTH);
+	glEnable (GL_BLEND);
 	glDisable(GL_TEXTURE_2D);
 
 	glBegin(GL_LINES);
@@ -1899,6 +1909,7 @@ static void R_DrawBbox(vec3_t origin, vec3_t mins, vec3_t maxs, vec3_t color)
 	glEnd();
 
 	glDisable(GL_LINE_SMOOTH);
+	glDisable(GL_BLEND);
 	glEnable(GL_TEXTURE_2D);
 	glPolygonMode(GL_BACK, GL_FILL);
 	glCullFace(GL_BACK);
@@ -1933,7 +1944,7 @@ void R_DrawEntBbox(entity_t *ent)
 			if (VectorLength(bbox_info->mins) < 1e-2
 					&& VectorLength(bbox_info->maxs) < 1e-2)
 				R_DrawCross(origin, color);
-			else
+			else if (cls.demoplayback)
 				R_DrawBbox(origin, bbox_info->mins, bbox_info->maxs, color);
 		}
 	}
@@ -3493,8 +3504,12 @@ void R_DrawEntitiesOnList ()
 		if (qmb_initialized && SetFlameModelState() == -1)
 			continue;
 
-		if (CL_ShowBBoxes())
+		if (CL_ShowBBoxes()) {
+			if (cl_bbox_wh.value)
+				glDepthRange (0, 0.3);
 			R_DrawEntBbox(currententity);
+			glDepthRange (0, 1.0);
+		}
 
 		if (ISTRANSPARENT(currententity) && cl_numtransvisedicts < MAX_VISEDICTS)
 		{
@@ -4027,6 +4042,7 @@ void R_Init (void)
 	Cvar_Register (&r_drawviewmodel);
 	Cvar_Register (&r_shadows);
 	Cvar_Register (&r_wateralpha);
+	Cvar_Register (&r_wateralpha_override);
 	Cvar_Register (&r_litwater);
 	Cvar_Register (&r_dynamic);
 	Cvar_Register (&r_novis);
@@ -4037,6 +4053,7 @@ void R_Init (void)
 	Cvar_Register (&r_outline_monsters);
 	Cvar_Register (&r_outline_color);
 	Cvar_Register (&r_fullbrightskins);
+	Cvar_Register (&r_fullbrightskins_monsters);
 	Cvar_Register (&r_fastsky);
 	Cvar_Register (&r_skycolor);
 	Cvar_Register (&r_drawflame);
@@ -4128,6 +4145,174 @@ void R_Init (void)
 	//texture_extension_number += 16;
 }
 
+void R_EmitLine(edict_t * start, edict_t * end, vec3_t color){
+
+	vec3_t origin_start, origin_end;
+
+	VectorCopy(start->v.absmin, origin_start);
+	VectorCopy(end->v.absmin, origin_end);
+	VectorAdd(origin_start, start->v.absmax, origin_start);
+	VectorAdd(origin_end, end->v.absmax, origin_end);
+	VectorScale(origin_start, 0.5, origin_start);
+	VectorScale(origin_end, 0.5, origin_end);
+
+	glCullFace(GL_FRONT);
+	glPolygonMode(GL_BACK, GL_LINE);
+	glLineWidth(1.0);
+	glEnable(GL_LINE_SMOOTH);
+	glEnable (GL_BLEND);
+	glDisable(GL_TEXTURE_2D);
+
+	glColor3f(color[0], color[1], color[2]);
+	glBegin(GL_LINES);
+
+	glVertex3fv(origin_start);
+	glVertex3fv(origin_end);
+
+	glEnd();
+
+	glDisable(GL_LINE_SMOOTH);
+	glDisable(GL_BLEND);
+	glEnable(GL_TEXTURE_2D);
+	glPolygonMode(GL_BACK, GL_FILL);
+	glCullFace(GL_BACK);
+
+}
+
+extern ddef_t * ED_FindField(char*);
+extern char * PR_ValueString(etype_t type, eval_t *val);
+void R_DrawEdicts (){
+	int i, j = 0, *v, focused = -1;
+	ddef_t *d;
+	bbox_cat_t cat;
+	edict_t *ed = NULL, *other_ed = NULL;
+	float bestdist, dist;
+	vec3_t rcpdelta;
+
+	if (sv.num_edicts <= 1)
+		return;
+
+	int * bboxes = Q_calloc(sv.num_edicts, sizeof(int));
+	bbox_cat_t * categories = Q_calloc(sv.num_edicts, sizeof(bbox_cat_t));
+
+	tracked_edict = 0;
+	bestdist = FLT_MAX;
+	// Compute ray reciprocal delta
+	for (i = 0; i < 3; i++)
+		rcpdelta[i] = 1.f / (r_farclip.value * vpn[i]);
+
+	for (i = 1; i < sv.num_edicts; i++)
+	{
+		ed = EDICT_NUM(i);
+
+		if (ed->free)
+			continue;
+
+		d = ED_FindField("classname");
+		v = (int *)((char *)&ed->v + d->ofs*4);
+
+		if (d) {
+			char * class = PR_ValueString(d->type, (eval_t *)v);
+
+			if (strlen(class) == 0)
+				continue;
+
+			if (Q_strncasecmp("player", class, 6) == 0)
+				continue;
+
+			if (Q_strncasecmp("trigger", class, 7) == 0)
+				cat = BBOX_CAT_TRIGGER;
+			else if (Q_strncasecmp("func", class, 4) == 0)
+				cat = BBOX_CAT_MISC;
+			else if (Q_strncasecmp("door", class, 4) == 0 || Q_strncasecmp("info", class, 4) == 0)
+				cat = BBOX_CAT_MISC;
+			else if (Q_strncasecmp("item", class, 4) == 0)
+				cat = BBOX_CAT_PICKUP;
+			else if (Q_strncasecmp("weapon", class, 6) == 0)
+				cat = BBOX_CAT_PICKUP;
+			else if (Q_strncasecmp("monster", class, 6) == 0) 
+				cat = BBOX_CAT_MONSTER;
+			else
+				continue;
+
+			// Keep track of the closest bounding box intersecting the center ray
+			// Note: if we're inside the box (dist == 0), we ignore this entity
+			if (RayVsBox (r_origin, rcpdelta, ed->v.absmin, ed->v.absmax, &dist) && dist > 0.f && dist < bestdist)
+			{
+				bestdist = dist;
+				focused = j;
+			}
+
+			bboxes[j] = i;
+			categories[j] = cat;
+			j++;
+		}
+	}
+
+	if (cl_bbox_wh.value)
+		glDepthRange (0, 0.3);
+
+	if (0 <= focused) {
+		categories[focused] = BBOX_CAT_HIGHLIGHT;
+		tracked_edict = bboxes[focused];
+
+		char * target = Q_strdup(GETEDICTFIELDNAME(EDICT_NUM(tracked_edict), "target"));
+		char * killtarget = Q_strdup(GETEDICTFIELDNAME(EDICT_NUM(tracked_edict), "killtarget"));
+		char * targetname = Q_strdup(GETEDICTFIELDNAME(EDICT_NUM(tracked_edict), "targetname"));
+
+		for (i = 1; i < sv.num_edicts; i++)
+		{
+			char * field;
+			ed = EDICT_NUM(i);
+
+			if (ed->free)
+				continue;
+				
+			//check which is targeted
+			field = GETEDICTFIELDNAME(ed, "targetname");
+
+			if ((strlen(target) && strlen(field) && Q_strcasecmp(target, field) == 0) || 
+				(strlen(killtarget) && strlen(field) && Q_strcasecmp(killtarget, field) == 0)) {
+				R_EmitLine(ed, EDICT_NUM(tracked_edict), bbox_colors[BBOX_CAT_HIGHLIGHT]);
+				for (int k = 0; k < j; k++)
+					if (bboxes[k] == NUM_FOR_EDICT(ed))
+						categories[k] = BBOX_CAT_LINKED;
+			}
+
+			field = GETEDICTFIELDNAME(ed, "target");
+
+			if (strlen(targetname) && strlen(field) && Q_strcasecmp(targetname, field) == 0) {
+				R_EmitLine(ed, EDICT_NUM(tracked_edict), bbox_colors[BBOX_CAT_LINKED]);
+				for (int k = 0; k < j; k++)
+					if (bboxes[k] == NUM_FOR_EDICT(ed))
+						categories[k] = BBOX_CAT_LINKED;
+			}
+
+			field = GETEDICTFIELDNAME(ed, "killtarget");
+
+			if (strlen(targetname) && strlen(field) && Q_strcasecmp(targetname, field) == 0) {
+				R_EmitLine(ed, EDICT_NUM(tracked_edict), bbox_colors[BBOX_CAT_LINKED]);
+				for (int k = 0; k < j; k++)
+					if (bboxes[k] == NUM_FOR_EDICT(ed))
+						categories[k] = BBOX_CAT_LINKED;
+			}
+		}
+
+		free(target);
+		free(killtarget);
+		free(targetname);
+	}
+
+	for (j--; j >= 0; j--) {
+		ed = EDICT_NUM(bboxes[j]);
+		R_DrawBbox(ed->v.origin, ed->v.mins, ed->v.maxs, bbox_colors[categories[j]]);
+	}
+
+	glDepthRange (0, 1.0);
+
+	free(bboxes);
+	free(categories);
+}
 /*
 ================
 R_RenderScene
@@ -4154,6 +4339,12 @@ void R_RenderScene (void)
 
 	// then draw the transparent ones
 	R_DrawTransEntitiesOnList ();
+
+    if (CL_ShowBBoxes())
+        R_DrawEdicts();
+
+    if (CL_ShowBilliards())
+        R_DrawBilliards();
 
 	Ghost_Draw();
 

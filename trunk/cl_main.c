@@ -60,7 +60,10 @@ cvar_t	cl_bobbing = {"cl_bobbing", "0"};
 cvar_t	cl_deadbodyfilter = {"cl_deadbodyfilter", "0"};
 cvar_t	cl_gibfilter = {"cl_gibfilter", "0"};
 cvar_t	cl_bbox = {"cl_bbox", "0"};
+cvar_t	cl_bbox_wh = {"cl_bbox_wh", "0"};
 cvar_t	cl_bboxcolors = {"cl_bboxcolors", "1"};
+cvar_t	cl_track_edict = {"cl_track_edict", "0"};
+cvar_t	cl_billiards = {"cl_billiards", "0"};
 cvar_t	cl_maxfps = {"cl_maxfps", "72", CVAR_SERVER};
 cvar_t	cl_advancedcompletion = {"cl_advancedcompletion", "1"};
 cvar_t	cl_independentphysics = {"cl_independentphysics", "1", CVAR_INIT};
@@ -71,6 +74,7 @@ cvar_t  cl_autodemo_allowunfinished = { "cl_autodemo_allowunfinished", "0" };
 cvar_t	cl_demoui = {"cl_demoui", "1", CVAR_ARCHIVE};
 cvar_t	cl_demouitimeout = {"cl_demouitimeout", "2.5", CVAR_ARCHIVE};
 cvar_t	cl_demouihidespeed = {"cl_demouihidespeed", "2", CVAR_ARCHIVE};
+cvar_t	cl_approx_demo_velocity = {"cl_approx_demo_velocity", "1", CVAR_ARCHIVE};
 
 client_static_t	cls;
 client_state_t	cl;
@@ -746,6 +750,10 @@ qboolean CL_ShowBBoxes(void)
 	return ((demo_bbox && cls.demoplayback) || (live_bbox && !cls.demoplayback)) && !cls.demorecording;
 }
 
+qboolean CL_TrackEdicts(void)
+{
+	return sv.active && (cl_track_edict.value != 0 || CL_ShowBBoxes()) && !cls.demorecording;
+}
 
 qboolean r_loadviewweapons = false;
 entity_t view_weapons[MAX_SCOREBOARD];
@@ -759,7 +767,7 @@ void CL_RelinkEntities (void)
 {
 	int			i, j, num_vweps;
 	float		frac, f, d, bobjrotate;
-	vec3_t		delta, oldorg;
+	vec3_t		delta, oldorg, v1, v0;
 	entity_t	*ent;
 	dlight_t	*dl;
 	model_t		*model;
@@ -781,6 +789,17 @@ void CL_RelinkEntities (void)
 
 	if (cls.demoplayback)
 	{
+		ent = &cl_entities[cl.viewentity];
+		if (ent && cl_approx_demo_velocity.value > 0.0) {
+			for (i = 0; i < 3; i++) {
+				v0[i] = (ent->msg_origins[0][i] - ent->msg_origins[1][i]) / (cl.mtime[0] - cl.mtime[1]);
+				v1[i] = (ent->msg_origins[1][i] - ent->msg_origins[2][i]) / (cl.mtime[1] - cl.mtime[2]);
+
+				// interpolate player velocity using dx/dt approximation
+				cl.velocity[i] = v1[i] + frac * (v0[i] - v1[i]);
+			}		
+		}
+
 		// interpolate the angles
 		for (j = 0 ; j < 3 ; j++)
 		{
@@ -1229,7 +1248,8 @@ void CL_RelinkEntities (void)
 #ifdef GLQUAKE
 		// view weapon support
 		GetViewWeaponModel(&vwep_modelindex);
-		if (cl_viewweapons.value && ent->modelindex == cl_modelindex[mi_player] && r_loadviewweapons && !r_loadq3player && (vwep_modelindex != -1))
+		if (cl_viewweapons.value && ent->modelindex == cl_modelindex[mi_player] && r_loadviewweapons && !r_loadq3player && (vwep_modelindex != -1) &&
+			((ent->frame >= 6 && ent->frame <= 16) || (ent->frame >= 35 && ent->frame <= 40) || (ent->frame >= 103 && ent->frame <= 118)))
 		{
 			entity_t *vwepent = &view_weapons[num_vweps];
 
@@ -1494,7 +1514,10 @@ void CL_Init (void)
 	Cvar_Register (&cl_deadbodyfilter);
 	Cvar_Register (&cl_gibfilter);
 	Cvar_Register (&cl_bbox);
+	Cvar_Register (&cl_bbox_wh);
 	Cvar_Register (&cl_bboxcolors);
+	Cvar_Register (&cl_track_edict);
+	Cvar_Register (&cl_billiards);
 	Cvar_Register (&cl_maxfps);
 	Cvar_Register (&cl_advancedcompletion);
 	Cvar_Register (&cl_independentphysics);
@@ -1505,6 +1528,7 @@ void CL_Init (void)
 	Cvar_Register(&cl_demoui);
 	Cvar_Register(&cl_demouitimeout);
 	Cvar_Register(&cl_demouihidespeed);
+	Cvar_Register(&cl_approx_demo_velocity);
 
 	if (COM_CheckParm("-noindphys"))
 	{

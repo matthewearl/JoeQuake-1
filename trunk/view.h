@@ -32,6 +32,7 @@ extern	cvar_t	v_gunkick;
 extern	cvar_t	show_stats;
 extern	cvar_t	show_stats_small;
 extern	cvar_t	show_movekeys;
+extern	cvar_t	show_grenadecounter;
 
 extern	cvar_t  v_contentblend;
 extern	cvar_t	v_damagecshift;
@@ -40,6 +41,8 @@ extern	cvar_t	v_suitcshift;
 extern	cvar_t	v_ringcshift;
 extern	cvar_t	v_pentcshift;
 extern	cvar_t	v_bonusflash;
+
+extern cvar_t cl_track_edict;
 
 #ifdef GLQUAKE
 extern	cvar_t	gl_crosshairalpha;
@@ -82,6 +85,7 @@ void SCR_DrawClock (void);
 void SCR_DrawSpeed (void);
 void SCR_DrawFPS (void);
 void SCR_DrawStats (void);
+void SCR_DrawEdictTracker (void);
 void SCR_DrawVolume (void);
 void SCR_DrawMovementKeys(void);
 void SCR_DrawPlaybackStats (void);

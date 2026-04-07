@@ -119,8 +119,7 @@ Returns false if the entity removed itself.
 */
 qboolean SV_RunThink (edict_t *ent)
 {
-	float	thinktime, oldframe; //johnfitz
-	int		i; //johnfitz
+	float	thinktime;
 
 	thinktime = ent->v.nextthink;
 	if (thinktime <= 0 || thinktime > sv.time + sv_frametime)
@@ -129,25 +128,15 @@ qboolean SV_RunThink (edict_t *ent)
 	if (thinktime < sv.time)
 		thinktime = sv.time;	// don't let things stay in the past.
 								// it is possible to start that way by a trigger with a local time.
-	oldframe = ent->v.frame; //johnfitz 
+
+	ent->oldthinktime = thinktime;
+	ent->oldframe = ent->v.frame; //johnfitz
 
 	ent->v.nextthink = 0;
 	pr_global_struct->time = thinktime;
 	pr_global_struct->self = EDICT_TO_PROG(ent);
 	pr_global_struct->other = EDICT_TO_PROG(sv.edicts);
 	PR_ExecuteProgram (ent->v.think);
-
-	//johnfitz -- PROTOCOL_FITZQUAKE
-	//capture interval to nextthink here and send it to client for better
-	//lerp timing, but only if interval is not 0.1 (which client assumes)
-	ent->sendinterval = false;
-	if (!ent->free && ent->v.nextthink && (ent->v.movetype == MOVETYPE_STEP || ent->v.frame != oldframe))
-	{
-		i = Q_rint((ent->v.nextthink - thinktime) * 255);
-		if (i >= 0 && i < 256 && i != 25 && i != 26) //25 and 26 are close enough to 0.1 to not send
-			ent->sendinterval = true;
-	}
-	//johnfitz
 
 	return !ent->free;
 }
@@ -1166,6 +1155,18 @@ void SV_Physics (void)
 			SV_Physics_Toss (ent);
 		else
 			Sys_Error ("SV_Physics: bad movetype %i", (int)ent->v.movetype);			
+
+		//johnfitz -- PROTOCOL_FITZQUAKE
+		//capture interval to nextthink here and send it to client for better
+		//lerp timing, but only if interval is not 0.1 (which client assumes)
+		ent->sendinterval = false;
+		if (!ent->free && ent->v.nextthink > sv.time && (ent->v.movetype == MOVETYPE_STEP || ent->v.movetype == MOVETYPE_WALK || ent->v.frame != ent->oldframe))
+		{
+			int j = Q_rint((ent->v.nextthink - ent->oldthinktime) * 255);
+			if (j >= 0 && j < 256 && j != 25 && j != 26) //25 and 26 are close enough to 0.1 to not send
+				ent->sendinterval = true;
+		}
+		//johnfitz
 	}
 
 	if (pr_global_struct->force_retouch)

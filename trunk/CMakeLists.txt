@@ -156,6 +156,8 @@ add_executable(joequake-gl
     pathtracer/pathtracer.c
     bhop/practice.c
     bhop/practice.h
+    billiards/billiards.c
+    billiards/billiards.h
     qcurses/browser.c
     qcurses/browser_curl.c
     qcurses/browser_local.c

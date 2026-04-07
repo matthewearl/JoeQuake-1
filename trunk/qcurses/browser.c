@@ -213,12 +213,15 @@ void M_Demos_KeyHandle_Browser (int k) {
             break;
     case K_PGUP:
     case K_HOME:
-        distance = keydown[K_HOME] ? mapslist->len : mapslist->places - 1;
+    case K_MWHEELUP:
+        if (browser_col != COL_COMMENT_LOADED) {
+            distance = keydown[K_HOME] ? mapslist->len : mapslist->places - 1;
+            distance = keydown[K_MWHEELUP] ? 10 : distance;
+        }
     case 'k':
         if (k == 'k' && !demo_browser_vim.value)
             break;
     case K_UPARROW:
-    case K_MWHEELUP:
         if (browser_col <= COL_RECORD){
             qcurses_list_move_cursor(mapslist, -distance);
             Browser_UpdateFurtherColumns(browser_col);
@@ -232,12 +235,15 @@ void M_Demos_KeyHandle_Browser (int k) {
             break;
     case K_PGDN:
     case K_END:
-        distance = keydown[K_END] ? mapslist->len : mapslist->places - 1;
+    case K_MWHEELDOWN:
+        if (browser_col != COL_COMMENT_LOADED) {
+            distance = keydown[K_END] ? mapslist->len : mapslist->places - 1;
+            distance = keydown[K_MWHEELUP] ? 10 : distance;
+        }
     case 'j':
         if (k == 'j' && !demo_browser_vim.value)
             break;
     case K_DOWNARROW:
-    case K_MWHEELDOWN:
         if (browser_col <= COL_RECORD) {
             qcurses_list_move_cursor(mapslist, distance);
             Browser_UpdateFurtherColumns(browser_col);
@@ -722,7 +728,7 @@ void M_Demos_HelpBox (qcurses_box_t *help_box, enum demos_tabs tab, char * searc
     }
 
     if ((tab == TAB_SDA_DATABASE && browser_col == COL_COMMENT_LOADED) || tab == TAB_LOCAL_DEMOS){
-        qcurses_print_centered(help_box, 8, "Play demo: Enter | Quickplay: Alt+Enter | Set ghost: Ctrl + Enter", true);
+        qcurses_print_centered(help_box, 8, "Play demo: Enter | Quickplay: Alt + Enter | Set ghost: Ctrl + Enter", true);
         if (ghost_demo_path[0] != '\0')
             qcurses_print_centered(help_box, 9, "Unset ghost: Ctrl + Shift + Enter", true);
     }
@@ -740,7 +746,7 @@ void mouse_map_cursor(qcurses_char_t * self, const mouse_state_t *ms) {
 
     qcurses_recordlist_t * ls = columns[COL_MAP];
 
-    if (ms->button_up == 1 || browser_col == COL_MAP) {
+    if (ms->button_up == 1){// || browser_col == COL_MAP) {
         if (row < 0 || row >= ls->list.places || row >= ls->list.len - ls->list.window_start)
             return;
 
@@ -766,7 +772,7 @@ void mouse_type_cursor(qcurses_char_t * self, const mouse_state_t *ms) {
 
     qcurses_recordlist_t * ls = columns[COL_TYPE];
 
-    if (ms->button_up == 1 || browser_col <= COL_TYPE) {
+    if (ms->button_up == 1){// || browser_col <= COL_TYPE) {
         if (row < 0 || row >= ls->list.places || row >= ls->list.len - ls->list.window_start)
             return;
 
@@ -793,7 +799,7 @@ void mouse_record_cursor(qcurses_char_t * self, const mouse_state_t *ms) {
 
     qcurses_recordlist_t * ls = columns[COL_RECORD];
 
-    if (ms->button_up == 1 || browser_col <= COL_RECORD) {
+    if (ms->button_up == 1){// || browser_col <= COL_RECORD) {
         if (row < 0 || row >= ls->list.places || row >= ls->list.len - ls->list.window_start)
             return;
 
@@ -819,6 +825,9 @@ qcurses_record_t * get_newest_records(char * html) {
     char * pch;
     char * src = Q_strcasestr(html, "<p class=\"d\">");
     char * end = Q_strcasestr(src + 1, "<p class=\"d\">");
+
+    if (!end) 
+        return NULL;
 
     *end = 0;
 
